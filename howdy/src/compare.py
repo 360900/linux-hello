@@ -3,8 +3,11 @@
 
 # Intercept Ctrl+C and exit gracefully
 import signal
-signal.signal(signal.SIGINT, lambda x, y: exec("raise SystemExit"))
 
+def handle_sigint(signum, frame):
+	raise SystemExit
+
+signal.signal(signal.SIGINT, handle_sigint)
 # Import time so we can start timing asap
 import time
 
