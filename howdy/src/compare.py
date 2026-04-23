@@ -9,6 +9,10 @@ timings = {
 	"st": time.time()
 }
 
+# Interrupt Ctrl+C and exit gracefully
+import signal
+signal.signal(signal.SIGINT, lambda x, y: exit(0))
+
 # Import required modules
 import sys
 import os
