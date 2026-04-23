@@ -11,7 +11,7 @@ timings = {
 
 # Interrupt Ctrl+C and exit gracefully
 import signal
-signal.signal(signal.SIGINT, lambda x, y: exit(0))
+signal.signal(signal.SIGINT, lambda x, y: exec("raise SystemExit"))
 
 # Import required modules
 import sys
