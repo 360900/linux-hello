@@ -2,12 +2,12 @@
 # Running in a local python instance to get around PATH issues
 
 # Intercept Ctrl+C and exit gracefully
-import signal
-
 def handle_sigint(signum, frame):
 	raise SystemExit
 
+import signal
 signal.signal(signal.SIGINT, handle_sigint)
+
 # Import time so we can start timing asap
 import time
 
