@@ -1,6 +1,10 @@
 # Compare incoming video with known faces
 # Running in a local python instance to get around PATH issues
 
+# Intercept Ctrl+C and exit gracefully
+import signal
+signal.signal(signal.SIGINT, lambda x, y: exec("raise SystemExit"))
+
 # Import time so we can start timing asap
 import time
 
@@ -8,10 +12,6 @@ import time
 timings = {
 	"st": time.time()
 }
-
-# Interrupt Ctrl+C and exit gracefully
-import signal
-signal.signal(signal.SIGINT, lambda x, y: exec("raise SystemExit"))
 
 # Import required modules
 import sys
