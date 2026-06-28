@@ -1,3 +1,12 @@
+# Guard against multiprocessing.forkserver re-importing this module.
+# OpenVINO GPU runtime spawns worker processes via forkserver, which
+# re-executes the main module. Without this guard, workers re-run the
+# camera setup, hit EBUSY on /dev/video*, and break the parent process
+# with "Failed to read camera" errors and PAM timeouts.
+import sys as _sys
+if __name__ != "__main__":
+	_sys.exit(0)
+
 import time
 
 timings = {
