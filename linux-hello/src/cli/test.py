@@ -4,13 +4,13 @@ import os
 import json
 import sys
 import time
-import dlib
 import cv2
 import numpy as np
 import paths_factory
 
 from i18n import _
 from recorders.video_capture import VideoCapture
+from recog import create_backend
 
 config = configparser.ConfigParser()
 config.read(paths_factory.config_file_path())
@@ -49,7 +49,6 @@ def print_text(line_number, text):
 
 
 use_cnn = config.getboolean('core', 'use_cnn', fallback=False)
-use_openvino = False
 
 encodings = []
 models = None
@@ -63,32 +62,15 @@ except FileNotFoundError:
 	pass
 
 try:
-	import openvino_face
-	if openvino_face.is_available():
-		face_detector = openvino_face.FaceDetector("GPU")
-		face_encoder_ov = openvino_face.FaceEncoder("GPU")
-		# OpenVINO embeddings (256-D) cannot be matched against models
-		# enrolled with dlib (128-D); fall back to dlib instead of
-		# crashing on np.dot at match time
-		model_dims = {len(e) for e in encodings}
-		if model_dims and model_dims != {face_encoder_ov.embedding_dim}:
-			print("Enrolled models use {}-D encodings but the OpenVINO encoder outputs {}-D; using dlib.".format(
-				"/".join(str(d) for d in sorted(model_dims)), face_encoder_ov.embedding_dim))
-		else:
-			use_openvino = True
-			print("Using OpenVINO GPU for face detection and encoding")
-except Exception as e:
-	print(f"OpenVINO not available ({e}), using dlib")
-
-if not use_openvino:
-	if use_cnn:
-		face_detector = dlib.cnn_face_detection_model_v1(paths_factory.mmod_human_face_detector_path())
-	else:
-		face_detector = dlib.get_frontal_face_detector()
-
-pose_predictor = dlib.shape_predictor(paths_factory.shape_predictor_5_face_landmarks_path())
-if not use_openvino:
-	face_encoder_dlib = dlib.face_recognition_model_v1(paths_factory.dlib_face_recognition_resnet_model_v1_path())
+	backend = create_backend(
+		use_cnn=use_cnn,
+		enrolled_dims={len(e) for e in encodings},
+		mismatch_hint="Delete the old models with 'sudo linux-hello-cli clear' first to switch to OpenVINO.")
+except FileNotFoundError:
+	print(_("Data files have not been downloaded, please run the following commands:"))
+	print("\n\tcd " + paths_factory.dlib_data_dir_path())
+	print("\tsudo ./install.sh\n")
+	sys.exit(1)
 
 clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
 
@@ -162,13 +144,10 @@ try:
 			cv2.putText(overlay, _("SCAN FRAME"), (width - 68, 16), cv2.FONT_HERSHEY_SIMPLEX, .3, (0, 255, 0), 0, cv2.LINE_AA)
 
 			rec_tm = time.time()
-			face_locations = face_detector(frame, 1)
+			face_locations = backend.detect_faces(frame, 1)
 			rec_tm = time.time() - rec_tm
 
 			for loc in face_locations:
-				if use_cnn and not use_openvino:
-					loc = loc.rect
-
 				color = (0, 0, 230)
 
 				x = int((loc.right() - loc.left()) / 2) + loc.left()
@@ -177,17 +156,10 @@ try:
 				r = int(r + (r * 0.2))
 
 				if models:
-					if use_openvino:
-						face_encoding = face_encoder_ov.encode(orig_frame, loc)
-						if face_encoding is not None:
-							enc_array = np.array(encodings)
-							matches = 1.0 - np.dot(enc_array, face_encoding)
-						else:
-							continue
-					else:
-						face_landmark = pose_predictor(orig_frame, loc)
-						face_encoding = np.array(face_encoder_dlib.compute_face_descriptor(orig_frame, face_landmark, 1))
-						matches = np.linalg.norm(encodings - face_encoding, axis=1)
+					face_encoding = backend.compute_encoding(orig_frame, loc)
+					if face_encoding is None:
+						continue
+					matches = backend.match(encodings, face_encoding)
 
 					match_index = np.argmin(matches)
 					match = matches[match_index]

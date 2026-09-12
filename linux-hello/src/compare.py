@@ -36,7 +36,6 @@ if "LINUX_HELLO_BLAS_THREADS" not in os.environ:
 
 import json
 import configparser
-import dlib
 import cv2
 from datetime import timezone, datetime
 import atexit
@@ -46,6 +45,7 @@ import numpy as np
 import _thread as thread
 import paths_factory
 from recorders.video_capture import VideoCapture
+from recog import create_backend
 from i18n import _
 
 def exit(code=None):
@@ -57,45 +57,19 @@ def exit(code=None):
 
 
 def init_detector(lock):
-	global face_detector, face_encoder, pose_predictor, use_openvino
+	global backend
 
-	if not os.path.isfile(paths_factory.shape_predictor_5_face_landmarks_path()):
+	try:
+		backend = create_backend(
+			use_cnn=use_cnn,
+			enrolled_dims={len(e) for e in encodings},
+			mismatch_hint="Re-run 'sudo linux-hello-cli add' to re-enroll for OpenVINO.")
+	except FileNotFoundError:
 		print(_("Data files have not been downloaded, please run the following commands:"))
 		print("\n\tcd " + paths_factory.dlib_data_dir_path())
 		print("\tsudo ./install.sh\n")
 		lock.release()
 		exit(1)
-
-	use_openvino = False
-	try:
-		import openvino_face
-		if openvino_face.is_available():
-			face_detector = openvino_face.FaceDetector("GPU")
-			face_encoder = openvino_face.FaceEncoder("GPU")
-			# OpenVINO embeddings (256-D) cannot be matched against models
-			# enrolled with dlib (128-D); fall back to dlib instead of
-			# crashing on np.dot at match time. Re-enroll with "linux-hello-cli add"
-			# to switch to OpenVINO.
-			model_dims = {len(e) for e in encodings}
-			if model_dims and model_dims != {face_encoder.embedding_dim}:
-				print("Enrolled models use {}-D encodings but the OpenVINO encoder outputs {}-D; falling back to dlib. Re-run 'sudo linux-hello-cli add' to re-enroll for OpenVINO.".format(
-					"/".join(str(d) for d in sorted(model_dims)), face_encoder.embedding_dim), file=sys.stderr)
-			else:
-				use_openvino = True
-	except Exception as e:
-		print("OpenVINO init failed:", e, file=sys.stderr)
-
-	if not use_openvino:
-		if use_cnn:
-			face_detector = dlib.cnn_face_detection_model_v1(paths_factory.mmod_human_face_detector_path())
-		else:
-			face_detector = dlib.get_frontal_face_detector()
-		face_encoder = None
-
-	pose_predictor = dlib.shape_predictor(paths_factory.shape_predictor_5_face_landmarks_path())
-	if not use_openvino:
-		dlib_encoder = dlib.face_recognition_model_v1(paths_factory.dlib_face_recognition_resnet_model_v1_path())
-		globals()["dlib_encoder"] = dlib_encoder
 
 	timings["ll"] = time.time() - timings["ll"]
 	lock.release()
@@ -135,10 +109,7 @@ dark_tries = 0
 frames = 0
 snapframes = []
 lowest_certainty = 10
-face_detector = None
-face_encoder = None
-pose_predictor = None
-use_openvino = False
+backend = None
 
 try:
 	models = json.load(open(paths_factory.user_model_path(user)))
@@ -287,28 +258,14 @@ while True:
 			frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
 			gsframe = cv2.rotate(gsframe, cv2.ROTATE_90_CLOCKWISE)
 
-	face_locations = face_detector(gsframe, 1)
+	face_locations = backend.detect_faces(gsframe, 1)
 
 	for fl in face_locations:
-		if use_cnn and not use_openvino:
-			fl = fl.rect
+		face_encoding = backend.compute_encoding(frame, fl)
+		if face_encoding is None:
+			continue
 
-		if use_openvino:
-			face_encoding = face_encoder.encode(frame, fl)
-			if face_encoding is None:
-				continue
-		else:
-			face_landmark = pose_predictor(frame, fl)
-			face_encoding = np.array(dlib_encoder.compute_face_descriptor(frame, face_landmark, 1))
-
-		if use_openvino:
-			# Cosine distance on L2-normalized 256-D embeddings, not the
-			# Euclidean distance dlib uses: the scale differs, so the
-			# "certainty" config value may need recalibrating for OpenVINO
-			enc_array = np.array(encodings)
-			matches = 1.0 - np.dot(enc_array, face_encoding)
-		else:
-			matches = np.linalg.norm(encodings - face_encoding, axis=1)
+		matches = backend.match(encodings, face_encoding)
 
 		match_index = np.argmin(matches)
 		match = matches[match_index]
@@ -357,8 +314,8 @@ while True:
 
 				rubberstamps.execute(config, ui_proc, {
 					"video_capture": video_capture,
-					"face_detector": face_detector,
-					"pose_predictor": pose_predictor,
+					"face_detector": backend.detector,
+					"pose_predictor": getattr(backend, "pose_predictor", None),
 					"clahe": clahe
 				})
 

@@ -8,6 +8,7 @@ import numpy as np
 import paths_factory
 
 from recorders.video_capture import VideoCapture
+from recog import create_backend
 from i18n import _
 
 try:
@@ -20,17 +21,10 @@ except ImportError as err:
 
 import cv2
 
-if not os.path.isfile(paths_factory.shape_predictor_5_face_landmarks_path()):
-	print(_("Data files have not been downloaded, please run the following commands:"))
-	print("\n\tcd " + paths_factory.dlib_data_dir_path())
-	print("\tsudo ./install.sh\n")
-	sys.exit(1)
-
 config = configparser.ConfigParser()
 config.read(paths_factory.config_file_path())
 
 use_cnn = config.getboolean("core", "use_cnn", fallback=False)
-use_openvino = False
 
 user = builtins.linux_hello_user
 enc_file = paths_factory.user_model_path(user)
@@ -48,31 +42,15 @@ except FileNotFoundError:
 	encodings = []
 
 try:
-	import openvino_face
-	if openvino_face.is_available():
-		face_detector = openvino_face.FaceDetector("GPU")
-		face_encoder_ov = openvino_face.FaceEncoder("GPU")
-		# OpenVINO embeddings (256-D) cannot be mixed with models enrolled
-		# using dlib (128-D); fall back to dlib so old models keep working
-		model_dims = {len(e) for model in encodings for e in model["data"]}
-		if model_dims and model_dims != {face_encoder_ov.embedding_dim}:
-			print("Enrolled models use {}-D encodings but the OpenVINO encoder outputs {}-D; using dlib. Delete the old models with 'sudo linux-hello-cli clear' first to switch to OpenVINO.".format(
-				"/".join(str(d) for d in sorted(model_dims)), face_encoder_ov.embedding_dim))
-		else:
-			use_openvino = True
-			print("Using OpenVINO GPU for face detection and encoding")
-except Exception as e:
-	print(f"OpenVINO not available ({e}), using dlib")
-
-if not use_openvino:
-	if use_cnn:
-		face_detector = dlib.cnn_face_detection_model_v1(paths_factory.mmod_human_face_detector_path())
-	else:
-		face_detector = dlib.get_frontal_face_detector()
-
-pose_predictor = dlib.shape_predictor(paths_factory.shape_predictor_5_face_landmarks_path())
-if not use_openvino:
-	face_encoder_dlib = dlib.face_recognition_model_v1(paths_factory.dlib_face_recognition_resnet_model_v1_path())
+	backend = create_backend(
+		use_cnn=use_cnn,
+		enrolled_dims={len(e) for model in encodings for e in model["data"]},
+		mismatch_hint="Delete the old models with 'sudo linux-hello-cli clear' first to switch to OpenVINO.")
+except FileNotFoundError:
+	print(_("Data files have not been downloaded, please run the following commands:"))
+	print("\n\tcd " + paths_factory.dlib_data_dir_path())
+	print("\tsudo ./install.sh\n")
+	sys.exit(1)
 
 if len(encodings) > 3:
 	print(_("NOTICE: Each additional model slows down the face recognition engine slightly"))
@@ -142,7 +120,7 @@ while frames < 60:
 		dark_tries += 1
 		continue
 
-	face_locations = face_detector(gsframe, 1)
+	face_locations = backend.detect_faces(gsframe, 1)
 
 	if face_locations:
 		break
@@ -163,18 +141,10 @@ elif len(face_locations) > 1:
 	print(_("Multiple faces detected, aborting"))
 	sys.exit(1)
 
-face_location = face_locations[0]
-if use_cnn and not use_openvino:
-	face_location = face_location.rect
-
-if use_openvino:
-	face_encoding = face_encoder_ov.encode(frame, face_location)
-	if face_encoding is None:
-		print("Failed to encode face, aborting")
-		sys.exit(1)
-else:
-	face_landmark = pose_predictor(frame, face_location)
-	face_encoding = np.array(face_encoder_dlib.compute_face_descriptor(frame, face_landmark, 1))
+face_encoding = backend.compute_encoding(frame, face_locations[0])
+if face_encoding is None:
+	print("Failed to encode face, aborting")
+	sys.exit(1)
 
 insert_model["data"].append(face_encoding.tolist())
 
