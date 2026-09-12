@@ -79,8 +79,8 @@ def make_snapshot(type):
 	snapshot.generate(snapframes, [
 		type + _(" LOGIN"),
 		_("Date: ") + datetime.now(timezone.utc).strftime("%Y/%m/%d %H:%M:%S UTC"),
-		_("Scan time: ") + str(round(time.time() - timings["fr"], 2)) + "s",
-		_("Frames: ") + str(frames) + " (" + str(round(frames / (time.time() - timings["fr"]), 2)) + "FPS)",
+		_("Scan time: ") + str(round(time.monotonic() - timings["fr"], 2)) + "s",
+		_("Frames: ") + str(frames) + " (" + str(round(frames / (time.monotonic() - timings["fr"]), 2)) + "FPS)",
 		_("Hostname: ") + os.uname().nodename,
 		_("Best certainty value: ") + str(round(lowest_certainty * 10, 1))
 	])
@@ -183,7 +183,9 @@ send_to_ui("M", _("Identifying you..."))
 
 frames = 0
 valid_frames = 0
-timings["fr"] = time.time()
+# monotonic so suspend/resume wall-clock jumps (NTP corrections) don't
+# instantly burn the whole scan timeout (boltgolt/howdy#1131)
+timings["fr"] = time.monotonic()
 dark_running_total = 0
 
 while True:
@@ -194,7 +196,7 @@ while True:
 		ui_subtext += " (skipped " + str(dark_tries) + " dark frames)"
 	send_to_ui("S", ui_subtext)
 
-	if time.time() - timings["fr"] > timeout:
+	if time.monotonic() - timings["fr"] > timeout:
 		if save_failed:
 			make_snapshot(_("FAILED"))
 		if dark_tries == valid_frames:
@@ -275,7 +277,7 @@ while True:
 
 		if 0 < match < video_certainty:
 			timings["tt"] = time.time() - timings["st"]
-			timings["fl"] = time.time() - timings["fr"]
+			timings["fl"] = time.monotonic() - timings["fr"]
 
 			if end_report:
 				def print_timing(label, k):
