@@ -6,6 +6,16 @@ usermodelsdir = get_option('user_models_dir') != '' ? get_option('user_models_di
 logpath = get_option('log_path')
 pythonpath = get_option('python_path')
 
+# A bundled runtime (built with tools/build_runtime.sh) replaces the system
+# interpreter entirely: PAM, wrappers and the GUI all use it, so the target
+# machine needs no python packages from its distro.
+bundled_python_dir = get_option('bundled_python_dir')
+use_bundled_python = bundled_python_dir != ''
+if use_bundled_python
+    pythonpath = join_paths(get_option('prefix'), get_option('libdir'), 'linux-hello-runtime', 'python', 'bin', 'python3')
+    meson.add_install_script('tools/install_runtime.py', bundled_python_dir, get_option('libdir'))
+endif
+
 config_path = join_paths(confdir, 'config.ini')
 
 paths_dict = {

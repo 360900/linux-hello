@@ -9,5 +9,6 @@ option('py_sources_dir', type: 'string', value: '', description: 'Set the python
 option('install_pam_config', type: 'boolean', value: true, description: 'Install pam config file (for Debian/Ubuntu)')
 option('install_config', type: 'boolean', value: true, description: 'Install Linux Hello config file')
 option('python_path', type: 'string', value: '/usr/bin/python3', description: 'Set the path to the python executable')
+option('bundled_python_dir', type: 'string', value: '', description: 'Path to a prebuilt python runtime from tools/build_runtime.sh; installed to lib/linux-hello-runtime and used instead of python_path')
 option('with_polkit', type: 'boolean', value: true, description: 'Install polkit policy config file')
 option('with_webauthn', type: 'boolean', value: true, description: 'Install the optional WebAuthn authenticator (based on PR #1125)')

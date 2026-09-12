@@ -44,16 +44,36 @@ testing and review.
 
 ## Building from source
 
-Requirements: `meson`, `ninja`, a C++ compiler, `python3` with
-`python3-opencv`, `dlib` (`python3-dlib`), and `python3-pyside6` for the GUI.
+Requirements: `meson`, `ninja`, a C++ compiler and `gcc`-compatible toolchain.
+
+**Bundled runtime (recommended).** Linux Hello can ship its own CPython plus
+every Python dependency (OpenCV, dlib, NumPy, PySide6, cryptography, fido2)
+inside the package, so the target machine needs nothing from its package
+repositories. All downloads are SHA256-pinned in `tools/runtime-manifest.json`;
+dlib is compiled from source against the bundled interpreter (no CUDA, no GUI
+layer):
+
+```sh
+tools/build_runtime.sh --outdir build-runtime
+meson setup build -Dbundled_python_dir="$(pwd)/build-runtime/linux-hello-runtime"
+```
+
+This adds ~400 MB to the install but removes every Python dependency from the
+host system — no `python-pyside6`, no `python-dlib`, no pip. The bundled
+interpreter is used by PAM, both CLI wrappers and the GUI, which also makes
+the install immune to interpreter upgrades on the target system.
+
+**System Python.** Alternatively, build against the host interpreter and rely
+on distro packages:
 
 ```sh
 meson setup build
-ninja -C build
-sudo ninja -C build install
 ```
 
-Useful build options (see `meson.options` for the full list):
+Runtime deps in that case: `python3-opencv`, `python3-dlib`, `numpy`,
+`python3-pyside6` (GUI), `python3-fido2` + `python3-cryptography` (WebAuthn).
+
+Build options (see `meson.options` for the full list):
 
 ```sh
 meson configure build -Dwith_webauthn=false -Dinstall_config=false

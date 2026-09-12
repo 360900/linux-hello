@@ -7,8 +7,17 @@ datadir = get_option('prefix') / get_option('datadir') / 'linux-hello'
 py_conf = configuration_data(paths_dict)
 py_conf.set('data_dir', datadir)
 
-py = import('python').find_installation(paths_dict.get('python_path'))
-py.dependency()
+if use_bundled_python
+    # The bundled interpreter lives at a fixed install path; no need to
+    # discover it at configure time (it may not exist yet).
+    py_full_path = paths_dict.get('python_path')
+    py_install_dir = ''
+else
+    py = import('python').find_installation(paths_dict.get('python_path'))
+    py.dependency()
+    py_full_path = py.full_path()
+    py_install_dir = py.get_install_dir()
+endif
 
 py_paths = configure_file(
     input: 'paths.py.in',
@@ -61,7 +70,7 @@ py_sources = [
 
 # Include PAM module
 if get_option('install_in_site_packages')
-    pysourcesinstalldir = join_paths(py.get_install_dir(), 'linux-hello')
+    pysourcesinstalldir = join_paths(py_install_dir, 'linux-hello')
 else  
     pysourcesinstalldir = get_option('py_sources_dir') != '' ? get_option('py_sources_dir') / 'linux-hello' : join_paths(get_option('prefix'), get_option('libdir'), 'linux-hello')
 endif
@@ -177,7 +186,7 @@ install_man('../linux-hello-cli.1')
 # endif
 
 cli_path = join_paths(pysourcesinstalldir, 'cli.py')
-conf_data = configuration_data({ 'script_path': cli_path, 'python_path': py.full_path() })
+conf_data = configuration_data({ 'script_path': cli_path, 'python_path': py_full_path })
 
 bin_name = 'linux-hello-cli'
 bin = configure_file(
@@ -196,7 +205,7 @@ install_data(
 if get_option('with_webauthn')
     webauthn_conf_data = configuration_data({
         'script_path': join_paths(pysourcesinstalldir, 'webauthn_daemon.py'),
-        'python_path': py.full_path(),
+        'python_path': py_full_path,
     })
     webauthn_bin = configure_file(
         input: 'bin/linux-hello-cli.in',

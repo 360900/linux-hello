@@ -2,7 +2,14 @@
 # The app runs elevated through polkit so it can manage models and the
 # system-wide config without any terminal usage.
 
-py = import('python').find_installation()
+if use_bundled_python
+    py_full_path = paths_dict.get('python_path')
+    py_install_dir = ''
+else
+    py = import('python').find_installation(paths_dict.get('python_path'))
+    py_full_path = py.full_path()
+    py_install_dir = py.get_install_dir()
+endif
 
 gui_datadir = get_option('prefix') / get_option('datadir') / 'linux-hello'
 
@@ -10,7 +17,7 @@ gui_datadir = get_option('prefix') / get_option('datadir') / 'linux-hello'
 if get_option('py_sources_dir') != ''
     core_lib_dir = get_option('py_sources_dir') / 'linux-hello'
 elif get_option('install_in_site_packages')
-    core_lib_dir = py.get_install_dir() / 'linux-hello'
+    core_lib_dir = py_install_dir / 'linux-hello'
 else
     core_lib_dir = get_option('prefix') / get_option('libdir') / 'linux-hello'
 endif
@@ -47,7 +54,7 @@ if get_option('install_in_site_packages')
         subdir: 'linux-hello-gui',
         install_tag: 'py_sources',
     )
-    pysourcesinstalldir = join_paths(py.get_install_dir(), 'linux-hello-gui')
+    pysourcesinstalldir = join_paths(py_install_dir, 'linux-hello-gui')
 else
     pysourcesinstalldir = get_option('py_sources_dir') != '' ? get_option('py_sources_dir') / 'linux-hello-gui' : join_paths(get_option('prefix'), get_option('libdir'), 'linux-hello-gui')
     install_data(
@@ -61,7 +68,7 @@ endif
 
 # The bin wrapper elevates through polkit when not running as root
 wrapper_conf = configuration_data({
-    'python_path': py.full_path(),
+    'python_path': py_full_path,
     'script_path': join_paths(pysourcesinstalldir, 'main.py'),
 })
 
