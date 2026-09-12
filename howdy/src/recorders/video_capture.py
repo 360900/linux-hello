@@ -120,10 +120,13 @@ class VideoCapture:
 
 		else:
 			# Start video capture on the IR camera through OpenCV
-			self.internal = cv2.VideoCapture(
-				self.config.get("video", "device_path"),
-				cv2.CAP_V4L
-			)
+			device_path = self.config.get("video", "device_path")
+			self.internal = cv2.VideoCapture(device_path, cv2.CAP_V4L)
+			if not self.internal.isOpened():
+				import re
+				m = re.search(r"(\d+)$", device_path)
+				if m:
+					self.internal = cv2.VideoCapture(int(m.group(1)))
 			# Set the capture frame rate
 			# Without this the first detected (and possibly lower) frame rate is used, -1 seems to select the highest
 			# Use 0 as a fallback to avoid breaking an existing setup, new installs should default to -1

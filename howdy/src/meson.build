@@ -29,6 +29,7 @@ py_sources = [
     'cli/test.py',
     'cli.py',
     'compare.py',
+    'openvino_face.py',
     'i18n.py',
     'paths_factory.py',
     'recorders/__init__.py',
@@ -107,6 +108,13 @@ if get_option('install_config') and not fs.exists(config_path)
 endif
 
 install_data('dlib-data/install.sh', 'dlib-data/Readme.md', install_dir: dlibdatadir, install_mode: 'rwxr--r--')
+
+install_data(
+    'openvino-models/install.sh',
+    install_dir: datadir / 'openvino-models',
+    install_mode: 'rwxr-xr-x',
+    install_tag: 'openvino_models',
+)
 
 install_man('../howdy.1')
 
