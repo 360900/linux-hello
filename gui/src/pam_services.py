@@ -12,6 +12,7 @@ KNOWN_SERVICES = [
 	"kde",              # kscreenlocker (lock screen) on Arch/Debian
 	"kcheckpass",       # older screen lock helper
 	"kscreensaver",     # legacy name
+	"plasmalogin",      # Plasma Login Manager (Fedora 44+ KDE default)
 	"sddm",             # display manager (some setups still use it)
 	"system-login",     # Arch system login stack
 	"common-auth",      # Debian/Ubuntu shared auth

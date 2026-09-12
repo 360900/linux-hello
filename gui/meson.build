@@ -104,6 +104,16 @@ if get_option('with_polkit')
     )
 endif
 
+# systemd drop-in so polkit-agent-helper can open the camera
+# (PrivateDevices=yes in polkit >= 127 blocks face auth; see boltgolt/howdy#1077)
+install_data(
+    files('src/systemd/polkit-agent-helper@.service.d/10-linux-hello.conf'),
+    rename: '10-linux-hello.conf',
+    install_dir: get_option('prefix') / get_option('libdir') / 'systemd' / 'system' / 'polkit-agent-helper@.service.d',
+    install_mode: 'rw-r--r--',
+    install_tag: 'config',
+)
+
 # App icon for the icon theme
 install_data(
     files('src/logo.png'),

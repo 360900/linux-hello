@@ -7,9 +7,6 @@ import fileinput
 import subprocess
 import sys
 import os
-import re
-import tarfile
-from shutil import rmtree, which
 
 # Don't run unless we need to configure the install
 # Will also happen on upgrade but we will catch that later on
@@ -106,75 +103,20 @@ if "upgrade" in sys.argv:
 
 	sys.exit(0)
 
-log("Downloading dlib")
+log("Checking for dlib")
 
-dlib_archive = "/tmp/v19.16.tar.gz"
-loader = which("wget")
-LOADER_CMD = None
-
-# If wget is installed, use that as the downloader
-if loader:
-	LOADER_CMD = [loader, "--tries", "5", "--output-document"]
-# Otherwise, fall back on curl
-else:
-	loader = which("curl")
-	LOADER_CMD = [loader, "--retry", "5", "--location", "--output"]
-
-# Assemble and execute the download command
-cmd = LOADER_CMD + [dlib_archive, "https://github.com/davisking/dlib/archive/v19.16.tar.gz"]
-handleStatus(sc(cmd))
-
-# The folder containing the dlib source
-DLIB_DIR = None
-# A regex of all files to ignore while unpacking the archive
-excludes = re.compile(
-	r"davisking-dlib-\w+/(dlib/(http_client|java|matlab|test/)|"
-	r"(docs|examples|python_examples)|"
-	r"tools/(archive|convert_dlib_nets_to_caffe|htmlify|imglab|python/test|visual_studio_natvis))"
-)
-
-# Open the archive
-with tarfile.open(dlib_archive) as tf:
-	for item in tf:
-		# Set the destination dir if unset
-		if not DLIB_DIR:
-			DLIB_DIR = "/tmp/" + item.name
-
-		# extract only files sufficient for building
-		if not excludes.match(item.name):
-			tf.extract(item, "/tmp")
-
-# Delete the downloaded archive
-os.unlink(dlib_archive)
-
-log("Building dlib")
-
-cmd = ["python3", "setup.py", "install"]
+# dlib comes from the python3-dlib package (a hard dependency).
+# We never build or pip-install dlib here: PEP 668 marks the system
+# environment as EXTERNALLY-MANAGED on modern Debian/Ubuntu, which makes
+# pip installs fail and can break the system python.
 cuda_used = False
-
-# Compile and link dlib
 try:
-	sp = subprocess.Popen(cmd, cwd=DLIB_DIR, stdout=subprocess.PIPE)
-except subprocess.CalledProcessError:
-	print("Error while building dlib")
-	raise
-
-# Go through each line from stdout to check for CUDA usage
-while sp.poll() is None:
-	line = sp.stdout.readline().decode("utf-8")
-
-	if "DLIB WILL USE CUDA" in line:
-		cuda_used = True
-
-	print(line, end="")
-
-log("Cleaning up dlib")
-
-# Remove the no longer needed git clone
-del sp
-rmtree(DLIB_DIR)
-
-print("Temporary dlib files removed")
+	import dlib
+	cuda_used = bool(getattr(dlib, "DLIB_USE_CUDA", False))
+	print("dlib found, CUDA " + ("enabled" if cuda_used else "disabled"))
+except ImportError:
+	print(col(3) + "python3-dlib is not importable by the system python." + col(0))
+	print("Linux Hello needs dlib for face detection. Try: sudo apt install python3-dlib")
 
 log("Configuring Linux Hello")
 
@@ -185,9 +127,8 @@ for line in fileinput.input(["/etc/linux-hello/config.ini"], inplace=1):
 
 print("CNN saved to config, CUDA " + ("enabled" if cuda_used else "disabled"))
 
-# Secure the Linux Hello folder
-handleStatus(sc(["chmod", "755", "-R", "/lib/security/linux-hello/"]))
-handleStatus(sc(["chmod", "755", "-R", "/etc/linux-hello/"]))
+# Secure the Linux Hello config folder
+handleStatus(sc(["chmod", "755", "/etc/linux-hello/"]))
 
 # Restrict biometric model files to root only
 models_dir = "/etc/linux-hello/models"
@@ -195,17 +136,11 @@ if os.path.isdir(models_dir):
 	os.chmod(models_dir, 0o700)
 	for f in os.listdir(models_dir):
 		os.chmod(os.path.join(models_dir, f), 0o600)
-
-# Allow anyone to execute the python CLI
-os.chmod("/lib/security/linux-hello", 0o755)
-os.chmod("/lib/security/linux-hello/cli.py", 0o755)
-handleStatus(sc(["chmod", "755", "-R", "/lib/security/linux-hello/cli"]))
 print("Permissions set")
 
-# Make the CLI executable as linux-hello-cli
-os.symlink("/lib/security/linux-hello/cli.py", "/usr/local/bin/linux-hello-cli")
-os.chmod("/usr/local/bin/linux-hello-cli", 0o755)
-print("Linux Hello command installed")
+# The command line tool is installed to /usr/bin/linux-hello-cli by the
+# package itself; no manual symlink is needed (a /usr/local/bin symlink
+# would shadow the packaged binary and crash on upgrade).
 
 log("Adding Linux Hello as PAM module")
 
