@@ -63,6 +63,31 @@ After installing, run the GUI app **Linux Hello** (or `linux-hello-cli` from a
 terminal) to enroll your face, then enable the PAM services you want from the
 settings page.
 
+## Hardware notes
+
+- **ASUS laptops with Sonix IR cameras (USB ID `3277:0018`)** — the IR emitter
+  is controlled by the laptop's proximity sensor, not a UVC control. The feed
+  looks black until a person approaches. Do **not** run
+  `linux-enable-ir-emitter configure` on these; it can wedge the USB bus and
+  require a hard reboot (boltgolt/howdy#1109). The IR LED sits in the RGB
+  camera cutout, so a privacy shutter can dim the IR feed.
+- **ThinkPad X1 Nano** — IR camera reports Y800 grayscale at 640x360 on
+  `/dev/video2`; auto dark-threshold detection handles the high baseline
+  (boltgolt/howdy#1113).
+- **ThinkPad X1 Yoga / Carbon (Chicony)** — if the emitter never lights up,
+  the `chicony-ir-toggle` tool or `linux-enable-ir-emitter` can enable it
+  persistently.
+- **SELinux-enforcing systems (Fedora)** — the display manager domain
+  (`xdm_t`) needs `map` permission on `/dev/video*` or camera open fails only
+  in GDM/lock-screen contexts (boltgolt/howdy#1117).
+- **Polkit >= 127** — the agent helper is sandboxed without device access; we
+  ship a systemd drop-in that re-enables camera access. If prompts still
+  fail, make sure the drop-in
+  `/usr/lib/systemd/system/polkit-agent-helper@.service.d/10-linux-hello.conf`
+  is installed and run `systemctl daemon-reload`.
+- **Hardware camera kill switches** are detected as a missing camera and fail
+  gracefully back to password auth.
+
 ## Credits
 
 Linux Hello is a fork of [Howdy](https://github.com/boltgolt/howdy) by

@@ -482,5 +482,8 @@ PAM_EXTERN auto pam_sm_chauthtok(pam_handle_t *pamh, int flags, int argc,
 }
 PAM_EXTERN auto pam_sm_setcred(pam_handle_t *pamh, int flags, int argc,
                                const char **argv) -> int {
-  return PAM_IGNORE;
+  // Report success so display managers that call pam_setcred() strictly
+  // (e.g. greetd, boltgolt/howdy#991) do not fail the session; this module
+  // does not manage credentials itself, pam_unix establishes them.
+  return PAM_SUCCESS;
 }

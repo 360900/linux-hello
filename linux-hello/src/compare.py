@@ -125,7 +125,7 @@ config = configparser.ConfigParser()
 config.read(paths_factory.config_file_path())
 
 use_cnn = config.getboolean("core", "use_cnn", fallback=False)
-timeout = config.getint("video", "timeout", fallback=4)
+timeout = config.getfloat("video", "timeout", fallback=4.0)
 # Parse the dark threshold; "auto" enables adaptive rejection which learns
 # the scene's darkness baseline and needs no manual tuning
 dark_threshold_raw = str(config.get("video", "dark_threshold", fallback="60")).strip().lower()
@@ -174,7 +174,7 @@ if rotate == 2:
 	height = video_capture.internal.get(cv2.CAP_PROP_FRAME_WIDTH) or 1
 scaling_factor = (max_height / height) or 1
 
-timeout = config.getint("video", "timeout", fallback=4)
+timeout = config.getfloat("video", "timeout", fallback=4.0)
 end_report = config.getboolean("debug", "end_report", fallback=False)
 
 clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
@@ -275,7 +275,7 @@ while True:
 		if lowest_certainty > match:
 			lowest_certainty = match
 
-		if 0 < match < video_certainty:
+		if 0 <= match < video_certainty:
 			timings["tt"] = time.time() - timings["st"]
 			timings["fl"] = time.monotonic() - timings["fr"]
 
