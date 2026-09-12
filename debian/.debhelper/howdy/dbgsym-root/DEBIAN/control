@@ -1,0 +1,12 @@
+Package: howdy-dbgsym
+Source: howdy
+Version: 3.0.0+nmu5
+Auto-Built-Package: debug-symbols
+Architecture: amd64
+Maintainer: boltgolt <boltgolt@gmail.com>
+Installed-Size: 663
+Depends: howdy (= 3.0.0+nmu5)
+Section: debug
+Priority: optional
+Description: debug symbols for howdy
+Build-Ids: 9c09d29d02a6bc266425dd2c249f87fde09479e5 64b8105e4a26271e88da5fb451b4316063d69781
