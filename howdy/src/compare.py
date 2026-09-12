@@ -13,10 +13,13 @@ timings = {
 import sys
 import os
 
-# Force singlethreaded BLAS. dlib's OpenBLAS/OpenMP matmuls can livelock when raced against this scri>
-os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
-os.environ.setdefault("OMP_NUM_THREADS", "1")
-os.environ.setdefault("GOTO_NUM_THREADS", "1")
+# Force singlethreaded BLAS. dlib's OpenBLAS/OpenMP matmuls can livelock when raced against this script.
+# Overwrite any inherited value since a pre-set thread count > 1 keeps the livelock alive.
+# Set HOWDY_BLAS_THREADS=1 in the environment to opt out of this (e.g. for CNN detector performance).
+if "HOWDY_BLAS_THREADS" not in os.environ:
+	os.environ["OPENBLAS_NUM_THREADS"] = "1"
+	os.environ["OMP_NUM_THREADS"] = "1"
+	os.environ["GOTO_NUM_THREADS"] = "1"
 
 import json
 import configparser
