@@ -1,10 +1,10 @@
-# Guard against multiprocessing.forkserver re-importing this module.
-# OpenVINO GPU runtime spawns worker processes via forkserver, which
-# re-executes the main module. Without this guard, workers re-run the
-# camera setup, hit EBUSY on /dev/video*, and break the parent process
-# with "Failed to read camera" errors and PAM timeouts.
+# Guard against multiprocessing re-importing this module in child processes.
+# Some GPU runtimes (e.g. OpenVINO) spawn workers via forkserver, which
+# re-executes the main module as "__mp_main__". Without this guard, workers
+# re-run the camera setup, hit EBUSY on /dev/video*, and break the parent
+# process with "Failed to read camera" errors and PAM timeouts.
 import sys as _sys
-if __name__ != "__main__":
+if __name__ == "__mp_main__":
 	_sys.exit(0)
 
 # Intercept Ctrl+C and exit gracefully
@@ -72,7 +72,16 @@ def init_detector(lock):
 		if openvino_face.is_available():
 			face_detector = openvino_face.FaceDetector("GPU")
 			face_encoder = openvino_face.FaceEncoder("GPU")
-			use_openvino = True
+			# OpenVINO embeddings (256-D) cannot be matched against models
+			# enrolled with dlib (128-D); fall back to dlib instead of
+			# crashing on np.dot at match time. Re-enroll with "howdy add"
+			# to switch to OpenVINO.
+			model_dims = {len(e) for e in encodings}
+			if model_dims and model_dims != {face_encoder.embedding_dim}:
+				print("Enrolled models use {}-D encodings but the OpenVINO encoder outputs {}-D; falling back to dlib. Re-run 'sudo howdy add' to re-enroll for OpenVINO.".format(
+					"/".join(str(d) for d in sorted(model_dims)), face_encoder.embedding_dim), file=sys.stderr)
+			else:
+				use_openvino = True
 	except Exception as e:
 		print("OpenVINO init failed:", e, file=sys.stderr)
 
@@ -275,6 +284,9 @@ while True:
 			face_encoding = np.array(dlib_encoder.compute_face_descriptor(frame, face_landmark, 1))
 
 		if use_openvino:
+			# Cosine distance on L2-normalized 256-D embeddings, not the
+			# Euclidean distance dlib uses: the scale differs, so the
+			# "certainty" config value may need recalibrating for OpenVINO
 			enc_array = np.array(encodings)
 			matches = 1.0 - np.dot(enc_array, face_encoding)
 		else:

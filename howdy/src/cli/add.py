@@ -32,13 +32,35 @@ config.read(paths_factory.config_file_path())
 use_cnn = config.getboolean("core", "use_cnn", fallback=False)
 use_openvino = False
 
+user = builtins.howdy_user
+enc_file = paths_factory.user_model_path(user)
+encodings = []
+
+if not os.path.exists(paths_factory.user_models_dir_path()):
+	print(_("No face model folder found, creating one"))
+	os.makedirs(paths_factory.user_models_dir_path(), mode=0o700)
+
+# Load existing models before picking a backend so we can check
+# embedding compatibility with OpenVINO below
+try:
+	encodings = json.load(open(enc_file))
+except FileNotFoundError:
+	encodings = []
+
 try:
 	import openvino_face
 	if openvino_face.is_available():
 		face_detector = openvino_face.FaceDetector("GPU")
 		face_encoder_ov = openvino_face.FaceEncoder("GPU")
-		use_openvino = True
-		print("Using OpenVINO GPU for face detection and encoding")
+		# OpenVINO embeddings (256-D) cannot be mixed with models enrolled
+		# using dlib (128-D); fall back to dlib so old models keep working
+		model_dims = {len(e) for model in encodings for e in model["data"]}
+		if model_dims and model_dims != {face_encoder_ov.embedding_dim}:
+			print("Enrolled models use {}-D encodings but the OpenVINO encoder outputs {}-D; using dlib. Delete the old models with 'sudo howdy clear' first to switch to OpenVINO.".format(
+				"/".join(str(d) for d in sorted(model_dims)), face_encoder_ov.embedding_dim))
+		else:
+			use_openvino = True
+			print("Using OpenVINO GPU for face detection and encoding")
 except Exception as e:
 	print(f"OpenVINO not available ({e}), using dlib")
 
@@ -51,19 +73,6 @@ if not use_openvino:
 pose_predictor = dlib.shape_predictor(paths_factory.shape_predictor_5_face_landmarks_path())
 if not use_openvino:
 	face_encoder_dlib = dlib.face_recognition_model_v1(paths_factory.dlib_face_recognition_resnet_model_v1_path())
-
-user = builtins.howdy_user
-enc_file = paths_factory.user_model_path(user)
-encodings = []
-
-if not os.path.exists(paths_factory.user_models_dir_path()):
-	print(_("No face model folder found, creating one"))
-	os.makedirs(paths_factory.user_models_dir_path(), mode=0o700)
-
-try:
-	encodings = json.load(open(enc_file))
-except FileNotFoundError:
-	encodings = []
 
 if len(encodings) > 3:
 	print(_("NOTICE: Each additional model slows down the face recognition engine slightly"))

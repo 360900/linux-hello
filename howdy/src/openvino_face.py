@@ -73,6 +73,11 @@ class FaceEncoder:
         self.net_h = self.input_layer.shape[2]
         self.net_w = self.input_layer.shape[3]
 
+    @property
+    def embedding_dim(self):
+        """Size of the embedding vector, e.g. 256 for face-reidentification-retail-0095"""
+        return int(self.output_layer.shape[-1])
+
     def encode(self, frame, face_rect):
         if len(frame.shape) == 2:
             frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)

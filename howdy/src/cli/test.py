@@ -46,13 +46,32 @@ def print_text(line_number, text):
 use_cnn = config.getboolean('core', 'use_cnn', fallback=False)
 use_openvino = False
 
+encodings = []
+models = None
+
+try:
+	user = builtins.howdy_user
+	models = json.load(open(paths_factory.user_model_path(user)))
+	for model in models:
+		encodings += model["data"]
+except FileNotFoundError:
+	pass
+
 try:
 	import openvino_face
 	if openvino_face.is_available():
 		face_detector = openvino_face.FaceDetector("GPU")
 		face_encoder_ov = openvino_face.FaceEncoder("GPU")
-		use_openvino = True
-		print("Using OpenVINO GPU for face detection and encoding")
+		# OpenVINO embeddings (256-D) cannot be matched against models
+		# enrolled with dlib (128-D); fall back to dlib instead of
+		# crashing on np.dot at match time
+		model_dims = {len(e) for e in encodings}
+		if model_dims and model_dims != {face_encoder_ov.embedding_dim}:
+			print("Enrolled models use {}-D encodings but the OpenVINO encoder outputs {}-D; using dlib.".format(
+				"/".join(str(d) for d in sorted(model_dims)), face_encoder_ov.embedding_dim))
+		else:
+			use_openvino = True
+			print("Using OpenVINO GPU for face detection and encoding")
 except Exception as e:
 	print(f"OpenVINO not available ({e}), using dlib")
 
@@ -65,17 +84,6 @@ if not use_openvino:
 pose_predictor = dlib.shape_predictor(paths_factory.shape_predictor_5_face_landmarks_path())
 if not use_openvino:
 	face_encoder_dlib = dlib.face_recognition_model_v1(paths_factory.dlib_face_recognition_resnet_model_v1_path())
-
-encodings = []
-models = None
-
-try:
-	user = builtins.howdy_user
-	models = json.load(open(paths_factory.user_model_path(user)))
-	for model in models:
-		encodings += model["data"]
-except FileNotFoundError:
-	pass
 
 clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
 
