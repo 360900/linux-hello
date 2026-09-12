@@ -77,7 +77,7 @@ linux-hello (2.6.0) xenial; urgency=medium
 linux-hello (2.5.1) xenial; urgency=medium
 
   * Removed dismiss_lockscreen as it could lock users out of their system (thanks @ujjwalbe, @ju916 and many others!)
-  * Added option to disable howdy when the laptop lid is closed (thanks @accek!)
+  * Added option to disable linux-hello when the laptop lid is closed (thanks @accek!)
   * Added automatic fallback to default frame color palette (thanks @Ethiarpus!)
   * Added manual exposure setting (thanks @accek!)
   * Fixed test command ignoring dark frame threshold (thanks @eduncan911!)
@@ -103,7 +103,7 @@ linux-hello (2.4.0) xenial; urgency=medium
   * Added fallbacks to $EDITOR for the config command (thanks @yassineim!)
   * Fixed missing cv2 module after installation (thanks @bendandersen and many others!)
   * Fixed file permissions crashing Linux Hello in some cases (thanks @GJDitchfield!)
-  * Fixed howdy using python3 from local virtual environment (thanks @EdwardJB!)
+  * Fixed linux-hello using python3 from local virtual environment (thanks @EdwardJB!)
 
  -- boltgolt <boltgolt@gmail.com>  Fri, 09 Nov 2018 20:59:45 +0100
 
