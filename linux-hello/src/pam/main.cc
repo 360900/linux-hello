@@ -40,6 +40,12 @@ const auto DEFAULT_TIMEOUT =
     std::chrono::duration<int, std::chrono::milliseconds::period>(100);
 const auto MAX_RETRIES = 5;
 
+// RAII guard to ensure closelog() is called when identify() returns,
+// regardless of which early-return path is taken.
+struct SyslogGuard {
+  ~SyslogGuard() { closelog(); }
+};
+
 #define S(msg) gettext(msg)
 
 /**
@@ -77,7 +83,8 @@ auto linux_hello_error(int status,
       break;
     default:
       conv_function(PAM_ERROR_MSG,
-                    std::string(S("Unknown error: ") + status).c_str());
+                    (std::string(S("Unknown error: ")) + std::to_string(status))
+                        .c_str());
       syslog(LOG_ERR, "Failure, unknown error %d", status);
     }
   } else if (WIFSIGNALED(status)) {
@@ -197,14 +204,27 @@ auto check_enabled(const INIReader &config, const char *username) -> int {
  */
 auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
               bool ask_auth_tok) -> int {
-  INIReader config(CONFIG_FILE_PATH);
   openlog("pam_linux_hello", 0, LOG_AUTHPRIV);
+  SyslogGuard syslog_guard;
+
+  // Verify the compare script exists and is accessible before proceeding.
+  // This catches broken installs and SELinux denials early with a clear
+  // message instead of a cryptic spawn failure.
+  if (access(COMPARE_PROCESS_PATH, R_OK) != 0) {
+    syslog(LOG_ERR,
+           "Compare script not accessible: %s (%s). SELinux may be denying "
+           "access, check the audit log and see the Linux Hello SELinux notes",
+           COMPARE_PROCESS_PATH, strerror(errno));
+    return PAM_AUTHINFO_UNAVAIL;
+  }
+
+  INIReader config(CONFIG_FILE_PATH);
 
   // Error out if we could not read the config file
   if (config.ParseError() != 0) {
-    syslog(LOG_ERR, "Failed to parse the configuration file: %d",
-           config.ParseError());
-    return PAM_SYSTEM_ERR;
+    syslog(LOG_ERR, "Failed to parse the configuration file: %s (%d)",
+           CONFIG_FILE_PATH, config.ParseError());
+    return PAM_AUTHINFO_UNAVAIL;
   }
 
   // Will contain the responses from PAM functions
@@ -267,8 +287,10 @@ auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
   pid_t child_pid;
 
   // Start the python subprocess
+  // NOTE: We pass `environ` so compare.py inherits PATH, LANG, HOME, etc.
+  // Passing nullptr would strip all env vars, causing silent failures.
   if (posix_spawnp(&child_pid, PYTHON_EXECUTABLE_PATH, nullptr, nullptr,
-                   const_cast<char *const *>(args), nullptr) != 0) {
+                   const_cast<char *const *>(args), environ) != 0) {
     syslog(LOG_ERR, "Can't spawn the Linux Hello process: %s (%d)", strerror(errno),
            errno);
     return PAM_SYSTEM_ERR;
@@ -355,10 +377,18 @@ auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
   // Get python process status code
   int status = child_task.get();
 
-  // If python process ran into a timeout
-  // Do not send enter presses or terminate the PAM function, as the user might
-  // still be typing their password
-  if (WIFEXITED(status) && WEXITSTATUS(status) != EXIT_SUCCESS && ask_pass) {
+  // If the compare process failed (non-zero exit or killed by signal) and the
+  // user is being asked for a password, do not block authentication, let the
+  // password attempt proceed. This prevents lockout when compare.py crashes,
+  // gets OOM-killed, or times out while the user is typing.
+  if (ask_pass && ((WIFEXITED(status) && WEXITSTATUS(status) != EXIT_SUCCESS) ||
+                   WIFSIGNALED(status))) {
+    if (WIFSIGNALED(status)) {
+      syslog(LOG_WARNING,
+             "Compare process killed by signal %d, falling back to password",
+             WTERMSIG(status));
+    }
+
     // Wait for the password to be typed
     pass_task.stop(false);
 
