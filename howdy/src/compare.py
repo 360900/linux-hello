@@ -3,7 +3,9 @@
 
 # Intercept Ctrl+C and exit gracefully
 def handle_sigint(signum, frame):
-	raise SystemExit
+	# Exit with the ABORT status, not 0: the PAM module maps status 0 to
+	# PAM_SUCCESS, which would let Ctrl+C pass as a successful authentication
+	raise SystemExit(12)
 
 import signal
 signal.signal(signal.SIGINT, handle_sigint)
