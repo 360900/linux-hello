@@ -49,9 +49,9 @@ from recorders.video_capture import VideoCapture
 from i18n import _
 
 def exit(code=None):
-	global gtk_proc
-	if "gtk_proc" in globals():
-		gtk_proc.terminate()
+	global ui_proc
+	if "ui_proc" in globals():
+		ui_proc.terminate()
 	if code is not None:
 		sys.exit(code)
 
@@ -113,13 +113,13 @@ def make_snapshot(type):
 
 
 def send_to_ui(type, message):
-	global gtk_proc
-	if "gtk_proc" in globals():
+	global ui_proc
+	if "ui_proc" in globals():
 		message = type + "=" + message + " \n"
 		try:
-			if gtk_proc.poll() is None:
-				gtk_proc.stdin.write(bytearray(message.encode("utf-8")))
-				gtk_proc.stdin.flush()
+			if ui_proc.poll() is None:
+				ui_proc.stdin.write(bytearray(message.encode("utf-8")))
+				ui_proc.stdin.flush()
 		except IOError:
 			pass
 
@@ -166,13 +166,13 @@ video_certainty = config.getfloat("video", "certainty", fallback=3.5) / 10
 end_report = config.getboolean("debug", "end_report", fallback=False)
 save_failed = config.getboolean("snapshots", "save_failed", fallback=False)
 save_successful = config.getboolean("snapshots", "save_successful", fallback=False)
-gtk_stdout = config.getboolean("debug", "gtk_stdout", fallback=False)
+ui_stdout = config.getboolean("debug", "ui_stdout", fallback=False)
 rotate = config.getint("video", "rotate", fallback=0)
 
-gtk_pipe = sys.stdout if gtk_stdout else subprocess.DEVNULL
+ui_pipe = sys.stdout if ui_stdout else subprocess.DEVNULL
 
 try:
-	gtk_proc = subprocess.Popen(["howdy-gtk", "--start-auth-ui"], stdin=subprocess.PIPE, stdout=gtk_pipe, stderr=gtk_pipe)
+	ui_proc = subprocess.Popen(["linux-hello", "--start-auth-ui"], stdin=subprocess.PIPE, stdout=ui_pipe, stderr=ui_pipe)
 	atexit.register(exit)
 except FileNotFoundError:
 	pass
@@ -352,10 +352,10 @@ while True:
 
 				send_to_ui("S", "")
 
-				if "gtk_proc" not in vars():
-					gtk_proc = None
+				if "ui_proc" not in vars():
+					ui_proc = None
 
-				rubberstamps.execute(config, gtk_proc, {
+				rubberstamps.execute(config, ui_proc, {
 					"video_capture": video_capture,
 					"face_detector": face_detector,
 					"pose_predictor": pose_predictor,

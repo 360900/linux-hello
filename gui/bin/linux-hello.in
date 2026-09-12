@@ -1,0 +1,9 @@
+#!/bin/sh
+
+# Launch the Linux Hello settings app.
+# Not running as root? Elevate through polkit so models and the system
+# config can be managed without a terminal.
+if [ "$(id -u)" != "0" ] && command -v pkexec >/dev/null 2>&1; then
+	exec pkexec @python_path@ "@script_path@" "$@"
+fi
+exec @python_path@ "@script_path@" "$@"

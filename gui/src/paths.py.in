@@ -1,0 +1,20 @@
+from pathlib import PurePath
+
+# Absolute path to the config directory (/etc/linux-hello)
+config_dir = PurePath("@config_dir@")
+
+# Absolute path to the user models directory
+user_models_dir = PurePath("@user_models_dir@")
+
+# Absolute path to the Linux Hello data directory
+data_dir = PurePath("@data_dir@")
+
+# Absolute path to the core python sources (/usr/lib/linux-hello), used to
+# import the camera discovery and capture code
+core_lib_dir = PurePath("@core_lib_dir@")
+
+# Absolute path to the logo png
+logo_path = PurePath("@logo_path@")
+
+# Path to the linux-hello-cli executable
+cli_path = PurePath("@cli_path@")

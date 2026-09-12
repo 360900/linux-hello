@@ -16,6 +16,6 @@ paths_dict = {
     'python_path': pythonpath
 }
 
-# We need to keep this order beause howdy-gtk defines the gtk script path which is used later in Linux Hello
-subdir('howdy-gtk')
+# The gui subdir sets up the Qt settings app; the core uses shared paths from paths_dict
+subdir('gui')
 subdir('linux-hello')

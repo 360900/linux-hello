@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Linux Hello
+GenericName=Face Authentication Settings
+Comment=Set up face authentication for your Linux system
+Exec=linux-hello
+Icon=linux-hello
+Terminal=false
+Categories=System;Security;Settings;
+Keywords=face;biometric;authentication;hello;login;camera;
