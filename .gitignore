@@ -111,6 +111,7 @@ debian/howdy.substvars
 debian/files
 debian/debhelper-build-stamp
 debian/howdy
+debian/.debhelper/
 
 # vscode
 .vscode/*

@@ -1,7 +1,7 @@
 howdy (3.0.0+nmu5) plucky; urgency=medium
 
   * Non-maintainer upload.
-  * Fix python3 lcoation
+  * Fix python3 location
 
  -- Bart Seghers <seghersbart@telenet.be>  Wed, 01 Oct 2025 09:30:56 +0200
 

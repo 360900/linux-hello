@@ -149,7 +149,7 @@ os.unlink(dlib_archive)
 
 log("Building dlib")
 
-cmd = ["sudo", "python3", "setup.py", "install"]
+cmd = ["python3", "setup.py", "install"]
 cuda_used = False
 
 # Compile and link dlib
@@ -186,13 +186,13 @@ for line in fileinput.input(["/etc/howdy/config.ini"], inplace=1):
 print("CNN saved to config, CUDA " + ("enabled" if cuda_used else "disabled"))
 
 # Secure the howdy folder
-handleStatus(sc(["chmod 755 -R /lib/security/howdy/"], shell=True))
-handleStatus(sc(["chmod 755 -R /etc/howdy/"], shell=True))
+handleStatus(sc(["chmod", "755", "-R", "/lib/security/howdy/"]))
+handleStatus(sc(["chmod", "755", "-R", "/etc/howdy/"]))
 
 # Allow anyone to execute the python CLI
 os.chmod("/lib/security/howdy", 0o755)
 os.chmod("/lib/security/howdy/cli.py", 0o755)
-handleStatus(sc(["chmod 755 -R /lib/security/howdy/cli"], shell=True))
+handleStatus(sc(["chmod", "755", "-R", "/lib/security/howdy/cli"]))
 print("Permissions set")
 
 # Make the CLI executable as howdy
@@ -203,7 +203,7 @@ print("Howdy command installed")
 log("Adding howdy as PAM module")
 
 # Activate the pam-config file
-handleStatus(subprocess.call(["pam-auth-update --package"], shell=True))
+handleStatus(subprocess.call(["pam-auth-update", "--package"]))
 
 # Sign off
 print("Installation complete.")

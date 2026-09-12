@@ -28,9 +28,9 @@ except Exception:
 
 # Refresh and remove howdy from pam-config
 try:
-	subprocess.call(["pam-auth-update --package"], shell=True)
-	subprocess.call(["rm /usr/share/pam-configs/howdy"], shell=True)
-	subprocess.call(["pam-auth-update --package"], shell=True)
+	subprocess.call(["pam-auth-update", "--package"])
+	os.remove("/usr/share/pam-configs/howdy")
+	subprocess.call(["pam-auth-update", "--package"])
 except Exception:
 	print("Can't remove pam module")
 
