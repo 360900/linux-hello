@@ -5,6 +5,16 @@ This product includes software developed as part of the Howdy project:
   Howdy - Copyright (C) 2018 boltgolt - https://github.com/boltgolt/howdy
   Licensed under the MIT License.
 
+This product also includes contributions adapted from upstream Howdy pull
+requests, credited to their authors:
+
+  - The recog/ recognition backend abstraction and the PAM hardening
+    (syslog guard, environment passthrough, signal fallback) are based on
+    https://github.com/boltgolt/howdy/pull/1088 by haleelrah.
+  - The WebAuthn virtual FIDO2 authenticator (webauthn/, verification.py,
+    linux-hello-webauthn) is based on https://github.com/boltgolt/howdy/pull/1125
+    by qilsklo.
+
 The original MIT license text follows:
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

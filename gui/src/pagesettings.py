@@ -65,29 +65,31 @@ class SettingsPage(QWidget):
 
 		config = cli_bridge.read_config()
 
-		def get(key, fallback):
+		def get(key, fallback, section=None):
+			if section and config.has_option(section, key):
+				return config.get(section, key)
 			for section in config.sections():
 				if config.has_option(section, key):
 					return config.get(section, key)
 			return fallback
 
-		for spec in SETTINGS:
+		def add_setting(spec, form, section=None):
 			key, label, kind = spec[0], spec[1], spec[2]
 			extra = spec[3] if len(spec) > 3 else None
 
 			if kind == "bool":
 				widget = QCheckBox()
-				widget.setChecked(get(key, "false").strip().lower() in ("true", "yes", "1", "on"))
+				widget.setChecked(get(key, "false", section).strip().lower() in ("true", "yes", "1", "on"))
 				getter = lambda w=widget: str(w.isChecked()).lower()
 			elif kind == "invbool":
 				widget = QCheckBox()
-				widget.setChecked(get(key, "false").strip().lower() not in ("true", "yes", "1", "on"))
+				widget.setChecked(get(key, "false", section).strip().lower() not in ("true", "yes", "1", "on"))
 				getter = lambda w=widget: str(not w.isChecked()).lower()
 			elif kind == "int":
 				widget = QSpinBox()
 				widget.setRange(extra[0], extra[1])
 				try:
-					widget.setValue(int(float(get(key, extra[0]))))
+					widget.setValue(int(float(get(key, extra[0], section))))
 				except ValueError:
 					widget.setValue(extra[0])
 				getter = lambda w=widget: str(w.value())
@@ -104,12 +106,15 @@ class SettingsPage(QWidget):
 			elif kind == "choice":
 				widget = QComboBox()
 				widget.addItems([str(c) for c in extra])
-				current = str(get(key, extra[0])).strip()
+				current = str(get(key, extra[0], section)).strip()
 				if current in [str(c) for c in extra]:
 					widget.setCurrentText(current)
 				getter = lambda w=widget: w.currentText()
+			elif kind == "strempty":
+				widget = QLineEdit(str(get(key, "", section)))
+				getter = lambda w=widget: w.text().strip()
 			else:  # str
-				widget = QLineEdit(str(get(key, "none")))
+				widget = QLineEdit(str(get(key, "none", section)))
 				getter = lambda w=widget: (w.text().strip() or "none")
 
 			save = QPushButton("Save")
@@ -120,8 +125,11 @@ class SettingsPage(QWidget):
 			row_layout.setContentsMargins(0, 0, 0, 0)
 			row_layout.addWidget(widget, 1)
 			row_layout.addWidget(save)
-			self.rows[key] = (widget, getter)
+			self.rows[key] = (widget, getter, section)
 			form.addRow("<b>{}</b><br/>{}".format(key, label), row)
+
+		for spec in SETTINGS:
+			add_setting(spec, form)
 
 		# --- KDE integration card ---
 		self.kde_group = QGroupBox("KDE lock screen integration")
@@ -144,6 +152,24 @@ class SettingsPage(QWidget):
 			kde_layout.addWidget(QLabel("No KDE or login PAM services found on this system."))
 		outer.addWidget(self.kde_group)
 
+		# --- WebAuthn card (based on PR #1125 by qilsklo) ---
+		webauthn_group = QGroupBox("WebAuthn / passkeys (experimental)")
+		webauthn_layout = QVBoxLayout(webauthn_group)
+		webauthn_info = QLabel(
+			"Use your face to unlock WebAuthn passkeys in the browser.\n"
+			"Setup with: sudo linux-hello-cli webauthn init, then enable the\n"
+			"linux-hello-webauthn systemd service. See /usr/share/doc/linux-hello/webauthn.md."
+		)
+		webauthn_info.setWordWrap(True)
+		webauthn_layout.addWidget(webauthn_info)
+		webauthn_form = QFormLayout()
+		webauthn_form.setLabelAlignment(Qt.AlignLeft)
+		webauthn_layout.addLayout(webauthn_form)
+		add_setting(("enabled", "WebAuthn authenticator enabled", "bool"), webauthn_form, section="webauthn")
+		add_setting(("user", "User account the authenticator serves (empty = auto)", "strempty"), webauthn_form, section="webauthn")
+		add_setting(("verify_timeout", "Face verification timeout in seconds", "int", (1, 60)), webauthn_form, section="webauthn")
+		outer.addWidget(webauthn_group)
+
 	def toggle_pam_service(self, service, on):
 		if on:
 			ok, message = pam_services.enable(service)
@@ -159,7 +185,7 @@ class SettingsPage(QWidget):
 				check.blockSignals(False)
 
 	def save_key(self, key):
-		widget, getter = self.rows[key]
-		code, output = cli_bridge.set_value(key, getter())
+		widget, getter, section = self.rows[key]
+		code, output = cli_bridge.set_value(key, getter(), section=section)
 		if code != 0:
 			QMessageBox.warning(self, "Save failed", output.strip()[-500:] or "Could not save " + key)

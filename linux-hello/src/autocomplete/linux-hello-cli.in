@@ -15,7 +15,7 @@ _linux_hello_cli() {
 	case "${prev}" in
 		# After the main command, show the commands
 		"linux-hello-cli")
-			opts="add clear config disable list remove clear snapshot test version"
+			opts="add clear config disable list remove clear snapshot test version webauthn"
 			COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
 			return 0
 			;;

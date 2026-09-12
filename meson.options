@@ -10,3 +10,4 @@ option('install_pam_config', type: 'boolean', value: true, description: 'Install
 option('install_config', type: 'boolean', value: true, description: 'Install Linux Hello config file')
 option('python_path', type: 'string', value: '/usr/bin/python3', description: 'Set the path to the python executable')
 option('with_polkit', type: 'boolean', value: true, description: 'Install polkit policy config file')
+option('with_webauthn', type: 'boolean', value: true, description: 'Install the optional WebAuthn authenticator (based on PR #1125)')

@@ -39,12 +39,16 @@ def get_value(section, key, fallback=None):
 	return config.get(section, key)
 
 
-def set_value(key, value):
+def set_value(key, value, section=None):
 	"""
 	Change a config value through the CLI so the file formatting and
 	comments stay intact. Returns (returncode, output).
 	"""
-	return run_cli(["set", key, str(value)])
+	arguments = ["set"]
+	if section:
+		arguments += ["--section", section]
+	arguments += [key, str(value)]
+	return run_cli(arguments)
 
 
 def detect_camera():

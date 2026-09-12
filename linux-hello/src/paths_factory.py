@@ -46,3 +46,19 @@ def user_models_dir_path() -> PurePath:
 
 def logo_path() -> str:
     return str(paths.data_dir / "logo.png")
+
+
+def webauthn_dir_path() -> str:
+    return str(paths.config_dir / "webauthn")
+
+
+def webauthn_state_path() -> str:
+    return str(paths.config_dir / "webauthn" / "state.json")
+
+
+def webauthn_keystore_dir_path() -> str:
+    return str(paths.config_dir / "webauthn" / "keystore")
+
+
+def webauthn_credentials_path(user: str) -> str:
+    return str(paths.config_dir / "webauthn" / "credentials" / f"{user}.json")

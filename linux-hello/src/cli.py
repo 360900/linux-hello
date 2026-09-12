@@ -44,9 +44,9 @@ parser = argparse.ArgumentParser(
 # Add an argument for the command
 parser.add_argument(
 	"command",
-	help=_("The command option to execute, can be one of the following: add, clear, config, disable, list, remove, snapshot, set, test or version."),
+	help=_("The command option to execute, can be one of the following: add, clear, config, disable, list, remove, snapshot, set, test, version or webauthn."),
 	metavar="command",
-	choices=["add", "clear", "config", "disable", "list", "remove", "set", "snapshot", "test", "version"])
+	choices=["add", "clear", "config", "disable", "list", "remove", "set", "snapshot", "test", "version", "webauthn"])
 
 # Add an argument for the extra arguments of disable and remove
 parser.add_argument(
@@ -71,6 +71,12 @@ parser.add_argument(
 	"--plain",
 	help=_("Print machine-friendly output."),
 	action="store_true")
+
+# Add the --section flag (used by set to disambiguate duplicate config options)
+parser.add_argument(
+	"--section",
+	help=_("Target a specific config.ini section (used by the set command)."),
+	default=None)
 
 # Overwrite the default help message so we can use a uppercase S
 parser.add_argument(
@@ -123,5 +129,7 @@ elif args.command == "snapshot":
 	import cli.snap
 elif args.command == "test":
 	import cli.test
+elif args.command == "webauthn":
+	import cli.webauthn
 else:
 	print("Linux Hello 3.0.0 BETA")

@@ -191,3 +191,51 @@ install_data(
   install_dir: get_option('bindir'),
   install_tag: 'bin',
 )
+
+# Optional WebAuthn virtual FIDO2 authenticator (based on PR #1125 by qilsklo)
+if get_option('with_webauthn')
+    webauthn_conf_data = configuration_data({
+        'script_path': join_paths(pysourcesinstalldir, 'webauthn_daemon.py'),
+        'python_path': py.full_path(),
+    })
+    webauthn_bin = configure_file(
+        input: 'bin/linux-hello-cli.in',
+        output: 'linux-hello-webauthn',
+        configuration: webauthn_conf_data,
+    )
+    install_data(
+        webauthn_bin,
+        install_mode: 'rwxr-xr-x',
+        install_dir: get_option('bindir'),
+        install_tag: 'bin',
+    )
+
+    webauthn_service = configure_file(
+        input: 'webauthn/linux-hello-webauthn.service.in',
+        output: 'linux-hello-webauthn.service',
+        configuration: {
+            'bindir': get_option('prefix') / get_option('bindir'),
+            'confdir': confdir,
+            'datadir': get_option('prefix') / get_option('datadir'),
+        },
+    )
+    install_data(
+        webauthn_service,
+        install_dir: get_option('prefix') / get_option('libdir') / 'systemd' / 'system',
+        install_tag: 'webauthn',
+    )
+
+    install_data(
+        'webauthn/70-linux-hello-webauthn.rules',
+        install_dir: get_option('prefix') / get_option('libdir') / 'udev' / 'rules.d',
+        install_tag: 'webauthn',
+    )
+
+    install_data(
+        'webauthn/docs/webauthn.md',
+        'webauthn/docs/webauthn-design.md',
+        install_dir: get_option('prefix') / get_option('datadir') / 'doc' / 'linux-hello',
+        install_mode: 'r--r--r--',
+        install_tag: 'webauthn',
+    )
+endif

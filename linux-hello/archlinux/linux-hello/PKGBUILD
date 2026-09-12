@@ -9,7 +9,7 @@ pkgrel=1
 pkgdesc="Windows Hello for Linux"
 arch=('x86_64')
 url="https://github.com/360900/linux-hello"
-license=('MIT')
+license=('GPL-3.0')
 depends=(
 	'opencv'
 	'hdf5'
@@ -18,6 +18,11 @@ depends=(
 	'python-dlib'
 	'python-numpy'
 	'python-opencv'
+)
+optdepends=(
+	'python-fido2: WebAuthn virtual FIDO2 authenticator'
+	'python-cryptography: WebAuthn virtual FIDO2 authenticator'
+	'python-pyside6: Linux Hello Qt settings app'
 )
 makedepends=(
 	'cmake'

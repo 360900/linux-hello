@@ -1,0 +1,32 @@
+[Unit]
+Description=Linux Hello WebAuthn virtual FIDO2 authenticator (face-verified passkeys)
+Documentation=file://@datadir@/doc/linux-hello/webauthn.md
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=@bindir@/linux-hello-webauthn
+# The service refuses to start unless [webauthn] enabled = true in config.ini
+Restart=on-failure
+RestartSec=2
+
+# Hardening: root is needed for /dev/uhid, the camera and the credential
+# store, but everything else is locked down
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=@confdir@/webauthn
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+# Devices the authenticator legitimately needs: uhid, the TPM and video
+DeviceAllow=/dev/uhid rw
+DeviceAllow=/dev/tpmrm0 rw
+DeviceAllow=char-video4linux rw
+
+[Install]
+WantedBy=multi-user.target

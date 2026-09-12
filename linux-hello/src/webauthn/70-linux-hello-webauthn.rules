@@ -1,0 +1,13 @@
+# Grant browsers access to the Linux Hello virtual FIDO2 authenticator.
+#
+# The daemon creates a uhid device with vendor 0x1209 product 0xf1d0. The
+# resulting hidraw node must be readable by the logged-in user, exactly like
+# a physical security key, or the browser cannot talk to it.
+#
+# TAG+="uaccess" hands the device to the user of the active seat via logind.
+# The FIDO usage-page tag lets browsers enumerate it as a security key.
+
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="f1d0", TAG+="uaccess", GROUP="input", MODE="0660"
+
+# Fallback match on the FIDO usage page for the virtual device
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ENV{ID_VENDOR_ID}=="1209", ENV{ID_MODEL_ID}=="f1d0", TAG+="uaccess"
