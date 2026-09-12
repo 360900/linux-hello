@@ -155,7 +155,13 @@ config.read(paths_factory.config_file_path())
 
 use_cnn = config.getboolean("core", "use_cnn", fallback=False)
 timeout = config.getint("video", "timeout", fallback=4)
-dark_threshold = config.getfloat("video", "dark_threshold", fallback=50.0)
+# Parse the dark threshold; "auto" enables adaptive rejection which learns
+# the scene's darkness baseline and needs no manual tuning
+dark_threshold_raw = str(config.get("video", "dark_threshold", fallback="60")).strip().lower()
+dark_threshold_auto = dark_threshold_raw in ("auto", "none")
+if not dark_threshold_auto:
+	dark_threshold = float(dark_threshold_raw)
+dark_history = []
 video_certainty = config.getfloat("video", "certainty", fallback=3.5) / 10
 end_report = config.getboolean("debug", "end_report", fallback=False)
 save_failed = config.getboolean("snapshots", "save_failed", fallback=False)
@@ -198,7 +204,6 @@ if rotate == 2:
 scaling_factor = (max_height / height) or 1
 
 timeout = config.getint("video", "timeout", fallback=4)
-dark_threshold = config.getfloat("video", "dark_threshold", fallback=60)
 end_report = config.getboolean("debug", "end_report", fallback=False)
 
 clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
@@ -223,7 +228,7 @@ while True:
 			make_snapshot(_("FAILED"))
 		if dark_tries == valid_frames:
 			print(_("All frames were too dark, please check dark_threshold in config"))
-			print(_("Average darkness: {avg}, Threshold: {threshold}").format(avg=str(dark_running_total / max(1, valid_frames)), threshold=str(dark_threshold)))
+			print(_("Average darkness: {avg}, Threshold: {threshold}").format(avg=str(dark_running_total / max(1, valid_frames)), threshold=("auto" if dark_threshold_auto else str(dark_threshold))))
 			exit(13)
 		else:
 			exit(11)
@@ -246,7 +251,20 @@ while True:
 	dark_running_total += darkness
 	valid_frames += 1
 
-	if (darkness > dark_threshold):
+	if dark_threshold_auto:
+		# Adaptive mode: build a baseline from accepted frames, then reject
+		# frames much darker than the baseline (flashing IR emitters produce
+		# near-black frames). The cap at 95 keeps fully unlit frames out even
+		# in very dim rooms where the lit baseline is high.
+		if len(dark_history) >= 5:
+			baseline = sorted(dark_history)[len(dark_history) // 2]
+			if darkness > min(95.0, baseline * 1.25 + 10):
+				dark_tries += 1
+				continue
+		dark_history.append(darkness)
+		if len(dark_history) > 30:
+			dark_history.pop(0)
+	elif (darkness > dark_threshold):
 		dark_tries += 1
 		continue
 

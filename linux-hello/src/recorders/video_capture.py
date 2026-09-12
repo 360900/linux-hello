@@ -31,8 +31,23 @@ class VideoCapture:
 		else:
 			self.config = config
 
-		# Check device path
-		if not os.path.exists(self.config.get("video", "device_path")):
+		# Resolve the device path, auto-detecting when set to "none" or empty
+		device_path = self.config.get("video", "device_path", fallback="none")
+		if device_path in ("none", "", "auto"):
+			try:
+				from recorders.device_discovery import autodetect_device
+			except ImportError:
+				from device_discovery import autodetect_device
+			device_path = autodetect_device()
+			if device_path is None:
+				print(_("No usable camera was found automatically."))
+				print(_("Connect a camera or set 'device_path' in the config file by running:"))
+				print("\n\tsudo linux-hello-cli config\n")
+				sys.exit(14)
+			# Persist the choice so the same camera is used next time
+			self.config.set("video", "device_path", device_path)
+		self.resolved_device_path = device_path
+		if not os.path.exists(device_path):
 			if self.config.getboolean("video", "warn_no_device", fallback=True):
 				print(_("Linux Hello could not find a camera device at the path specified in the config file."))
 				print(_("It is very likely that the path is not configured correctly, please edit the 'device_path' config value by running:"))
@@ -106,7 +121,7 @@ class VideoCapture:
 			# Set the capture source for ffmpeg
 			from recorders.ffmpeg_reader import ffmpeg_reader
 			self.internal = ffmpeg_reader(
-				self.config.get("video", "device_path"),
+				self.resolved_device_path,
 				self.config.get("video", "device_format", fallback="v4l2")
 			)
 
@@ -114,17 +129,16 @@ class VideoCapture:
 			# Set the capture source for pyv4l2
 			from recorders.pyv4l2_reader import pyv4l2_reader
 			self.internal = pyv4l2_reader(
-				self.config.get("video", "device_path"),
+				self.resolved_device_path,
 				self.config.get("video", "device_format", fallback="v4l2")
 			)
 
 		else:
 			# Start video capture on the IR camera through OpenCV
-			device_path = self.config.get("video", "device_path")
-			self.internal = cv2.VideoCapture(device_path, cv2.CAP_V4L)
+			self.internal = cv2.VideoCapture(self.resolved_device_path, cv2.CAP_V4L)
 			if not self.internal.isOpened():
 				import re
-				m = re.search(r"(\d+)$", device_path)
+				m = re.search(r"(\d+)$", self.resolved_device_path)
 				if m:
 					self.internal = cv2.VideoCapture(int(m.group(1)))
 			# Set the capture frame rate

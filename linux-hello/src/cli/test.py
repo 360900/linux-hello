@@ -23,7 +23,12 @@ video_capture = VideoCapture(config)
 
 video_certainty = config.getfloat("video", "certainty", fallback=3.5) / 10
 exposure = config.getint("video", "exposure", fallback=-1)
-dark_threshold = config.getfloat("video", "dark_threshold", fallback=60)
+# Same adaptive "auto" mode as compare.py: learn the scene baseline
+dark_threshold_raw = str(config.get("video", "dark_threshold", fallback="60")).strip().lower()
+dark_threshold_auto = dark_threshold_raw in ("auto", "none")
+if not dark_threshold_auto:
+	dark_threshold = float(dark_threshold_raw)
+dark_history = []
 
 print(_("""
 Opening a window with a test feed
@@ -138,7 +143,20 @@ try:
 		if slow_mode:
 			cv2.putText(overlay, _("SLOW MODE"), (width - 66, height - 10), cv2.FONT_HERSHEY_SIMPLEX, .3, (0, 0, 255), 0, cv2.LINE_AA)
 
-		if hist_perc[0] > dark_threshold:
+		darkness = hist_perc[0]
+		if dark_threshold_auto:
+			if len(dark_history) >= 5:
+				baseline = sorted(dark_history)[len(dark_history) // 2]
+				too_dark = darkness > min(95.0, baseline * 1.25 + 10)
+			else:
+				too_dark = False
+			dark_history.append(darkness)
+			if len(dark_history) > 30:
+				dark_history.pop(0)
+		else:
+			too_dark = darkness > dark_threshold
+
+		if too_dark:
 			cv2.putText(overlay, _("DARK FRAME"), (width - 68, 16), cv2.FONT_HERSHEY_SIMPLEX, .3, (0, 0, 255), 0, cv2.LINE_AA)
 		else:
 			cv2.putText(overlay, _("SCAN FRAME"), (width - 68, 16), cv2.FONT_HERSHEY_SIMPLEX, .3, (0, 255, 0), 0, cv2.LINE_AA)
