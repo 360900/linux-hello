@@ -17,6 +17,6 @@ clean:
 	# Delete mason build directory
 	rm -rf ./build
 	# Force remove temp debian build directory
-	rm -rf ./debian/howdy
+	rm -rf ./debian/linux-hello
 	# Make sure subprojects get pulled locally
-	meson subprojects download --sourcedir howdy/src/pam
+	meson subprojects download --sourcedir linux-hello/src/pam

@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # Executed on deinstallation
-# Completely remove howdy from the system
+# Completely remove Linux Hello from the system
 
 # Import required modules
 import subprocess
@@ -13,30 +13,30 @@ if "remove" not in sys.argv and "purge" not in sys.argv:
 	sys.exit(0)
 
 # Don't try running this if it's already gone
-if not os.path.exists("/lib/security/howdy/cli"):
+if not os.path.exists("/lib/security/linux-hello/cli"):
 	sys.exit(0)
 
 # Remove files and symlinks
 try:
-	os.unlink("/usr/local/bin/howdy")
+	os.unlink("/usr/local/bin/linux-hello")
 except Exception:
 	print("Can't remove executable")
 try:
-	os.unlink("/usr/share/bash-completion/completions/howdy")
+	os.unlink("/usr/share/bash-completion/completions/linux-hello")
 except Exception:
 	print("Can't remove autocompletion script")
 
-# Refresh and remove howdy from pam-config
+# Refresh and remove Linux Hello from pam-config
 try:
 	subprocess.call(["pam-auth-update", "--package"])
-	os.remove("/usr/share/pam-configs/howdy")
+	os.remove("/usr/share/pam-configs/linux-hello")
 	subprocess.call(["pam-auth-update", "--package"])
 except Exception:
 	print("Can't remove pam module")
 
 # Remove full installation folder, just to be sure
 try:
-	rmtree("/lib/security/howdy")
+	rmtree("/lib/security/linux-hello")
 except Exception:
 	# This error is normal
 	pass

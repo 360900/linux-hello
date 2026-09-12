@@ -1,25 +1,25 @@
-howdy (3.0.0+nmu5) plucky; urgency=medium
+linux-hello (3.0.0+nmu5) plucky; urgency=medium
 
   * Non-maintainer upload.
   * Fix python3 location
 
  -- Bart Seghers <seghersbart@telenet.be>  Wed, 01 Oct 2025 09:30:56 +0200
 
-howdy (3.0.0+nmu4) plucky; urgency=medium
+linux-hello (3.0.0+nmu4) plucky; urgency=medium
 
   * Non-maintainer upload.
   * Switch to plucky to fix build
 
  -- Bart Seghers <seghersbart@telenet.be>  Wed, 01 Oct 2025 09:24:07 +0200
 
-howdy (3.0.0+nmu3) focal; urgency=medium
+linux-hello (3.0.0+nmu3) focal; urgency=medium
 
   * Non-maintainer upload.
   * 
 
  -- Bart Seghers <seghersbart@telenet.be>  Wed, 01 Oct 2025 08:59:48 +0200
 
-howdy (3.0.0+nmu2) focal; urgency=medium
+linux-hello (3.0.0+nmu2) focal; urgency=medium
 
   * Non-maintainer upload.
   * Upload to personal PPA
@@ -27,7 +27,7 @@ howdy (3.0.0+nmu2) focal; urgency=medium
 
  -- Bart Seghers <seghersbart@telenet.be>  Wed, 01 Oct 2025 08:42:02 +0200
 
-howdy (3.0.0) focal; urgency=medium
+linux-hello (3.0.0) focal; urgency=medium
 
   * Way too many changes to all list individually, thanks to everyone who contributed!
   * Rewrote PAM handling logic in C++ (thanks @saidsay-so!)
@@ -38,7 +38,7 @@ howdy (3.0.0) focal; urgency=medium
 
  -- boltgolt <boltgolt@gmail.com>  Sun, 22 Jun 2025 11:52:44 +0200
 
-howdy (2.6.1) xenial; urgency=medium
+linux-hello (2.6.1) xenial; urgency=medium
 
   * Fixed accidentally using emergency priority for log messages (thanks @kageurufu and many others!)
   * Fixed certainty prompt selected the exact opposite value
@@ -50,7 +50,7 @@ howdy (2.6.1) xenial; urgency=medium
 
  -- boltgolt <boltgolt@gmail.com>  Wed, 02 Sep 2020 15:05:59 +0200
 
-howdy (2.6.0) xenial; urgency=medium
+linux-hello (2.6.0) xenial; urgency=medium
 
   * Added new options to capture a snapshot of failed or even successful logins
   * Added command that creates a new snapshot and saves it
@@ -74,7 +74,7 @@ howdy (2.6.0) xenial; urgency=medium
 
  -- boltgolt <boltgolt@gmail.com>  Mon, 22 Jun 2020 16:11:46 +0200
 
-howdy (2.5.1) xenial; urgency=medium
+linux-hello (2.5.1) xenial; urgency=medium
 
   * Removed dismiss_lockscreen as it could lock users out of their system (thanks @ujjwalbe, @ju916 and many others!)
   * Added option to disable howdy when the laptop lid is closed (thanks @accek!)
@@ -85,7 +85,7 @@ howdy (2.5.1) xenial; urgency=medium
 
  -- boltgolt <boltgolt@gmail.com>  Fri, 29 Mar 2019 23:02:21 +0100
 
-howdy (2.5.0) xenial; urgency=medium
+linux-hello (2.5.0) xenial; urgency=medium
 
   * Added FFmpeg and v4l2 recorders (thanks @timwelch!)
   * Added automatic PAM inclusion on installation
@@ -97,24 +97,24 @@ howdy (2.5.0) xenial; urgency=medium
 
  -- boltgolt <boltgolt@gmail.com>  Sun, 06 Jan 2019 14:37:41 +0100
 
-howdy (2.4.0) xenial; urgency=medium
+linux-hello (2.4.0) xenial; urgency=medium
 
   * Cameras are now selected by path instead of by video device number (thanks @Rhiyo!)
   * Added fallbacks to $EDITOR for the config command (thanks @yassineim!)
   * Fixed missing cv2 module after installation (thanks @bendandersen and many others!)
-  * Fixed file permissions crashing Howdy in some cases (thanks @GJDitchfield!)
+  * Fixed file permissions crashing Linux Hello in some cases (thanks @GJDitchfield!)
   * Fixed howdy using python3 from local virtual environment (thanks @EdwardJB!)
 
  -- boltgolt <boltgolt@gmail.com>  Fri, 09 Nov 2018 20:59:45 +0100
 
-howdy (2.3.1) xenial; urgency=high
+linux-hello (2.3.1) xenial; urgency=high
 
   * Fixed issue where `frame_width` and `frame_height` would be completely ignored (thanks @janecz-n!)
   * Fixed security problem with remote session authentication (thanks @cccaballero!)
 
  -- boltgolt <boltgolt@gmail.com>  Mon, 24 Sep 2018 17:49:07 +0100
 
-howdy (2.3.0) xenial; urgency=medium
+linux-hello (2.3.0) xenial; urgency=medium
 
   * Added a config option to set the frame height and width (thanks @wzrdtales!)
   * Rewrote the code that fetches the non-root username (thanks @dmig!)
@@ -124,13 +124,13 @@ howdy (2.3.0) xenial; urgency=medium
 
  -- boltgolt <boltgolt@gmail.com>  Thu, 28 Jun 2018 14:59:52 +0100
 
-howdy (2.2.2) xenial; urgency=medium
+linux-hello (2.2.2) xenial; urgency=medium
 
   * Fixed fetching of wrong config section (thanks @halcyoncheng and @arifeinberg!)
 
  -- boltgolt <boltgolt@gmail.com>  Fri, 11 May 2018 10:43:03 +0200
 
-howdy (2.2.1) xenial; urgency=medium
+linux-hello (2.2.1) xenial; urgency=medium
 
   * Added mechanism to keep config files between updates
   * Added force_mjpeg option to fix YUYV image issues (thanks @arifeinberg!)
@@ -140,27 +140,27 @@ howdy (2.2.1) xenial; urgency=medium
 
  -- boltgolt <boltgolt@gmail.com>  Thu, 10 May 2018 15:14:03 +0200
 
-howdy (2.1.0) xenial; urgency=medium
+linux-hello (2.1.0) xenial; urgency=medium
 
   * First complete PPA release
   * Reworked CLI
 
  -- boltgolt <boltgolt@gmail.com>  Fri, 13 Apr 2018 22:22:27 +0200
 
-howdy (2.0.0-alpha+3) xenial; urgency=medium
+linux-hello (2.0.0-alpha+3) xenial; urgency=medium
 
   * Fixed issue where dlib dependency failed to install on some installations
   * Added preinst script for camera detection
 
  -- boltgolt <boltgolt@gmail.com>  Thu, 12 Apr 2018 21:42:42 +0000
 
-howdy (2.0.0-alpha+2) xenial; urgency=medium
+linux-hello (2.0.0-alpha+2) xenial; urgency=medium
 
   * Fixed build dependency issue
 
  -- boltgolt <boltgolt@gmail.com>  Sat, 07 Apr 2018 21:30:48 +0200
 
-howdy (2.0.0-alpha+1) xenial; urgency=low
+linux-hello (2.0.0-alpha+1) xenial; urgency=low
 
   * Initial packaged release.
 

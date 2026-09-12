@@ -1,0 +1,6 @@
+Name: Linux Hello
+Default: yes
+Priority: 512
+Auth-Type: Primary
+Auth:
+	[success=end default=ignore]        @pamdir@/pam_linux_hello.so

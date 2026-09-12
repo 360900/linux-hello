@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# Installation script to install howdy
+# Installation script to install Linux Hello
 # Executed after primary apt install
 
 # Import required modules
@@ -43,15 +43,15 @@ sc = subprocess.call
 # If the package is being upgraded
 if "upgrade" in sys.argv:
 	# If preinst has made a config backup
-	if os.path.exists("/tmp/howdy_config_backup_v" + sys.argv[2] + ".ini"):
+	if os.path.exists("/tmp/linux-hello_config_backup_v" + sys.argv[2] + ".ini"):
 		# Get the config parser
 		import configparser
 
 		# Load th old and new config files
 		oldConf = configparser.ConfigParser()
-		oldConf.read("/tmp/howdy_config_backup_v" + sys.argv[2] + ".ini")
+		oldConf.read("/tmp/linux-hello_config_backup_v" + sys.argv[2] + ".ini")
 		newConf = configparser.ConfigParser()
-		newConf.read("/etc/howdy/config.ini")
+		newConf.read("/etc/linux-hello/config.ini")
 
 		# Go through every setting in the old config and apply it to the new file
 		for section in oldConf.sections():
@@ -79,7 +79,7 @@ if "upgrade" in sys.argv:
 				# Fix capture being enabled by default
 				if key == "capture_failed" or key == "capture_successful":
 					if value == "true":
-						print("NOTICE: Howdy login image captures have been disabled by default, change the config to enable them again")
+						print("NOTICE: Linux Hello login image captures have been disabled by default, change the config to enable them again")
 						value = "false"
 
 				# MIGRATION 2.6.1 -> 3.0.0
@@ -101,7 +101,7 @@ if "upgrade" in sys.argv:
 					newConf.set(section, key, value)
 
 		# Write it all to file
-		with open("/etc/howdy/config.ini", "w") as configfile:
+		with open("/etc/linux-hello/config.ini", "w") as configfile:
 			newConf.write(configfile)
 
 	sys.exit(0)
@@ -176,31 +176,38 @@ rmtree(DLIB_DIR)
 
 print("Temporary dlib files removed")
 
-log("Configuring howdy")
+log("Configuring Linux Hello")
 
 # Make sure to use CNN if dlib was compiled with CUDA support
-for line in fileinput.input(["/etc/howdy/config.ini"], inplace=1):
+for line in fileinput.input(["/etc/linux-hello/config.ini"], inplace=1):
 	line = line.replace("use_cnn = false", "use_cnn = " + str(cuda_used).lower())
 	print(line, end="")
 
 print("CNN saved to config, CUDA " + ("enabled" if cuda_used else "disabled"))
 
-# Secure the howdy folder
-handleStatus(sc(["chmod", "755", "-R", "/lib/security/howdy/"]))
-handleStatus(sc(["chmod", "755", "-R", "/etc/howdy/"]))
+# Secure the Linux Hello folder
+handleStatus(sc(["chmod", "755", "-R", "/lib/security/linux-hello/"]))
+handleStatus(sc(["chmod", "755", "-R", "/etc/linux-hello/"]))
+
+# Restrict biometric model files to root only
+models_dir = "/etc/linux-hello/models"
+if os.path.isdir(models_dir):
+	os.chmod(models_dir, 0o700)
+	for f in os.listdir(models_dir):
+		os.chmod(os.path.join(models_dir, f), 0o600)
 
 # Allow anyone to execute the python CLI
-os.chmod("/lib/security/howdy", 0o755)
-os.chmod("/lib/security/howdy/cli.py", 0o755)
-handleStatus(sc(["chmod", "755", "-R", "/lib/security/howdy/cli"]))
+os.chmod("/lib/security/linux-hello", 0o755)
+os.chmod("/lib/security/linux-hello/cli.py", 0o755)
+handleStatus(sc(["chmod", "755", "-R", "/lib/security/linux-hello/cli"]))
 print("Permissions set")
 
-# Make the CLI executable as howdy
-os.symlink("/lib/security/howdy/cli.py", "/usr/local/bin/howdy")
-os.chmod("/usr/local/bin/howdy", 0o755)
-print("Howdy command installed")
+# Make the CLI executable as linux-hello-cli
+os.symlink("/lib/security/linux-hello/cli.py", "/usr/local/bin/linux-hello-cli")
+os.chmod("/usr/local/bin/linux-hello-cli", 0o755)
+print("Linux Hello command installed")
 
-log("Adding howdy as PAM module")
+log("Adding Linux Hello as PAM module")
 
 # Activate the pam-config file
 handleStatus(subprocess.call(["pam-auth-update", "--package"]))

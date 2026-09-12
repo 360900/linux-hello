@@ -11,16 +11,16 @@ if "upgrade" in sys.argv:
 	# Try to copy the config file as a backup
 	try:
 		# Try to copy the new location first
-		if os.path.exists("/etc/howdy/config.ini"):
-			subprocess.call(["cp /etc/howdy/config.ini /tmp/howdy_config_backup_v" + sys.argv[2] + ".ini"], shell=True)
+		if os.path.exists("/etc/linux-hello/config.ini"):
+			subprocess.call(["cp /etc/linux-hello/config.ini /tmp/linux-hello_config_backup_v" + sys.argv[2] + ".ini"], shell=True)
 		# If that does not exist, try copying the old location
 		else:
-			subprocess.call(["cp /lib/security/howdy/config.ini /tmp/howdy_config_backup_v" + sys.argv[2] + ".ini"], shell=True)
+			subprocess.call(["cp /lib/security/linux-hello/config.ini /tmp/linux-hello_config_backup_v" + sys.argv[2] + ".ini"], shell=True)
 
 		# Let the user know so he knows where to look on a failed install
-		print("Backup of Howdy config file created in /tmp/howdy_config_backup_v" + sys.argv[2] + ".ini")
+		print("Backup of Linux Hello config file created in /tmp/linux-hello_config_backup_v" + sys.argv[2] + ".ini")
 	except subprocess.CalledProcessError:
-		print("Could not make an backup of old Howdy config file")
+		print("Could not make an backup of old Linux Hello config file")
 
 	# Don't continue setup when we're just upgrading
 	sys.exit(0)

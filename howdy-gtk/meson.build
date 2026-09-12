@@ -1,5 +1,5 @@
 if meson.is_subproject()
-project('howdy-gtk', license: 'MIT', version: 'beta', meson_version: '>= 0.64.0')
+project('howdy-gtk', license: 'GPL-3.0', version: 'beta', meson_version: '>= 0.64.0')
 endif
 
 datadir = get_option('prefix') / get_option('datadir') / 'howdy-gtk'
