@@ -79,6 +79,6 @@ class WelcomePage(QWidget):
 			else:
 				lines.append("Face authentication is enabled for supported logins")
 		else:
-			lines.append("No face models enrolled yet — run the setup wizard")
+			lines.append("No face models enrolled yet. Run the setup wizard")
 
 		self.status_label.setText("\n".join(lines))

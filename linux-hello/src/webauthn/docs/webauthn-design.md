@@ -1,4 +1,4 @@
-# Linux Hello WebAuthn — Design Document
+# Linux Hello WebAuthn: Design Document
 
 > Implemented in [boltgolt/howdy PR #1125](https://github.com/boltgolt/howdy/pull/1125) by **qilsklo**; adapted for Linux Hello.
 
@@ -19,7 +19,7 @@ ships by default. This design adds an optional **Linux Hello WebAuthn** subsyste
 
 1. implements a standards-compliant **CTAP2 authenticator core** in Python
    (credentials, ES256 signing, authenticator data, attestation) built on
-   **python-fido2** — no invented protocols, no hand-rolled crypto;
+   **python-fido2**: no invented protocols, no hand-rolled crypto;
 2. performs **Linux Hello facial verification immediately before every credential
    operation**, reporting it as CTAP *user verification* (UV);
 3. exposes the authenticator to browsers as a **virtual CTAP2 HID device via
@@ -29,7 +29,7 @@ ships by default. This design adds an optional **Linux Hello WebAuthn** subsyste
    keystore abstraction whose backends are a clearly-marked software development
    keystore and a **TPM 2.0** backend (keys created inside the TPM, wrapped blobs on
    disk, signing inside the TPM);
-5. leaves every existing Linux Hello code path (PAM, CLI, GTK) untouched — the feature is
+5. leaves every existing Linux Hello code path (PAM, CLI, GTK) untouched; the feature is
    off unless explicitly initialised and its daemon started.
 
 The architecture deliberately splits the **authenticator core** (transport-agnostic,
@@ -107,14 +107,14 @@ several projects (below). No extension, flag, or browser patch is needed.
 | [mc256/tpm-fido2-thinkpad-linux](https://github.com/mc256/tpm-fido2-thinkpad-linux) | Go; fingerprint (fprintd) + TPM as FIDO2 key over uhid; works with Firefox/Chrome unmodified | **Direct analogue** of this design with fingerprint instead of face |
 | [linux-credentials/credentialsd](https://github.com/linux-credentials/credentialsd) (ex `xdg-credentials-portal`) | Rust D-Bus service + proposed XDG portal; Gateway / Flow-Control / UI-Control APIs; Firefox 140 extension + patched Flatpak; FOSDEM 2026 talk | The likely *future* of Linux platform authenticators. Today: USB + hybrid transports only; the "internal platform authenticator" flow exists as mockups. A Linux Hello backend here is the long-term goal, not a today deliverable |
 | KeePassXC 2.7.7+ | Browser-extension native messaging passkeys | Shows native messaging works but only via its own extension; per-site `navigator.credentials` override, not OS-level |
-| [Yubico python-fido2](https://github.com/Yubico/python-fido2) | CTAP2 client + WebAuthn data structures | Provides `AuthenticatorData.create`, `AttestedCredentialData.create`, COSE `ES256`, canonical CBOR, `CTAPHID` constants, `CtapError` codes — everything needed to *be* an authenticator except the command dispatcher |
+| [Yubico python-fido2](https://github.com/Yubico/python-fido2) | CTAP2 client + WebAuthn data structures | Provides `AuthenticatorData.create`, `AttestedCredentialData.create`, COSE `ES256`, canonical CBOR, `CTAPHID` constants, `CtapError` codes: everything needed to *be* an authenticator except the command dispatcher |
 
 ### 3.3 Linux Hello issue tracker
 
 - [#782](https://github.com/boltgolt/howdy/issues/782) requested exactly this
   feature (closed, unimplemented).
 - [#1076](https://github.com/boltgolt/howdy/issues/1076) raises the passive-biometric
-  concern (face can be captured by pointing the device at the user) — incorporated
+  concern (face can be captured by pointing the device at the user), incorporated
   into the threat model (§9) and mitigations (rubberstamps, §7.4).
 
 ### 3.4 TPM stack
@@ -134,16 +134,16 @@ everything):
 
 | Option | Works today? | Browser changes | Maintainability | Verdict |
 |---|---|---|---|---|
-| **1. Native messaging + web extension** | Only on sites the extension can script; `navigator.credentials` override is fragile, CSP-hostile, and per-browser packaging is heavy | Extension per browser | Poor: we'd own an extension, a JS shim, and a host protocol | ✗ Rejected — and credentialsd already ships exactly this shim for testing; duplicating it adds nothing |
-| **2. Virtual CTAP2 HID device (`/dev/uhid`)** | **Yes** — Firefox ≥114 and all Chromium releases treat it as a security key; proven by tpm-fido, fido2-hid-bridge, softauth, passless, mc256 | **None** | Good: one kernel ABI (uhid is stable), one CTAP2 implementation, standard protocol | ✅ **Chosen transport for now** |
+| **1. Native messaging + web extension** | Only on sites the extension can script; `navigator.credentials` override is fragile, CSP-hostile, and per-browser packaging is heavy | Extension per browser | Poor: we'd own an extension, a JS shim, and a host protocol | ✗ Rejected, since credentialsd already ships exactly this shim for testing; duplicating it adds nothing |
+| **2. Virtual CTAP2 HID device (`/dev/uhid`)** | **Yes**: Firefox ≥114 and all Chromium releases treat it as a security key; proven by tpm-fido, fido2-hid-bridge, softauth, passless, mc256 | **None** | Good: one kernel ABI (uhid is stable), one CTAP2 implementation, standard protocol | ✅ **Chosen transport for now** |
 | **3. Own D-Bus platform-authenticator API** | No browser consumes a bespoke D-Bus API | Patches in both browsers | Terrible: we'd invent a protocol the prompt forbids and compete with credentialsd | ✗ Rejected |
-| **4. Extend credentialsd** | Partially — needs their extension or patched Firefox; internal-authenticator flow not yet implemented; Rust codebase, LGPL, separate release cycle | Extension / patched builds | Long-term best: it *is* the emerging standard portal | 🔶 **Adopted as roadmap**, not as the first deliverable. Our authenticator core is transport-agnostic so a credentialsd/D-Bus backend can be added without touching credential or key management |
+| **4. Extend credentialsd** | Partially: needs their extension or patched Firefox; internal-authenticator flow not yet implemented; Rust codebase, LGPL, separate release cycle | Extension / patched builds | Long-term best: it *is* the emerging standard portal | 🔶 **Adopted as roadmap**, not as the first deliverable. Our authenticator core is transport-agnostic so a credentialsd/D-Bus backend can be added without touching credential or key management |
 
 **Why UHID wins today:** it is the only option where an unmodified Firefox *and*
 Chromium complete real registrations and assertions, using a stable kernel interface
 and a protocol (CTAP2) with a public test-suite culture, multiple independent
-implementations, and no invented parts. The cost — the browser believes it is
-talking to a *roaming* authenticator rather than a *platform* one — is cosmetic for
+implementations, and no invented parts. The cost (the browser believes it is
+talking to a *roaming* authenticator rather than a *platform* one) is cosmetic for
 the user (RPs see `transports: ["usb"]` and cannot request `platform` attachment to
 reach us), and is exactly the trade-off every prior-art project accepted.
 
@@ -181,7 +181,7 @@ rather than diverges from, the Linux desktop ecosystem.
 │  │  keepalive)  │  while UV runs│  GetNextAssertion    │   │  (same as PAM)│ │
 │  └──────────────┘               └──────┬───────┬───────┘   └──────┬───────┘  │
 │                                        │       │                  │ camera   │
-│  (future: dbus.py — credentialsd       │       │                  ▼          │
+│  (future: dbus.py - credentialsd       │       │                  ▼          │
 │   backend, same core)             ┌────▼───┐ ┌─▼─────────┐   IR/RGB webcam   │
 │                                   │store.py│ │keystore.py│                   │
 │                                   │creds + │ │ software │                    │
@@ -210,7 +210,7 @@ linux-hello/src/cli/webauthn.py            linux-hello-cli webauthn init|registe
 
 ### 5.1 Privilege & process model
 
-- `linux-hello-webauthn.service` (systemd, root, `ExecStart=… service.py`) — root is
+- `linux-hello-webauthn.service` (systemd, root, `ExecStart=… service.py`): root is
   required for `/dev/uhid`, the camera during verification, and the credential
   store, matching Linux Hello's existing trust model (PAM verification also runs as root).
   Hardening directives (`ProtectHome`, `NoNewPrivileges`, `PrivateTmp`, syscall
@@ -227,24 +227,24 @@ linux-hello/src/cli/webauthn.py            linux-hello-cli webauthn init|registe
 Implemented against **CTAP 2.1** using python-fido2's data structures; the only code
 we author is command dispatch and policy:
 
-- `authenticatorGetInfo (0x04)` — versions `["FIDO_2_0","FIDO_2_1"]`; options
+- `authenticatorGetInfo (0x04)`: versions `["FIDO_2_0","FIDO_2_1"]`; options
   `rk=true, up=true, uv=true, plat=false, credMgmt=false, clientPin=false/absent`;
   `maxMsgSize`; one AAGUID fixed for Linux Hello WebAuthn (single project-wide constant);
-  algorithms: ES256 (−7) only (EdDSA later).
-- `authenticatorMakeCredential (0x01)` — validates `clientDataHash`, RP entity,
+  algorithms: ES256 (-7) only (EdDSA later).
+- `authenticatorMakeCredential (0x01)`: validates `clientDataHash`, RP entity,
   user entity, `pubKeyCredParams` (must include ES256), `excludeList` (returns
   `CTAP2_ERR_CREDENTIAL_EXCLUDED` after UP/UV), honours `rk`; **runs
   `verify_face()`** (UV) before creating the key; returns packed **self-attestation**
-  (`alg: -7`, signature by the credential's own key — no attestation CA to protect,
+  (`alg: -7`, signature by the credential's own key, no attestation CA to protect,
   standard for non-certified/platform authenticators; RPs treating it as `none` is
   correct behaviour).
-- `authenticatorGetAssertion (0x02)` / `GetNextAssertion (0x08)` — resolves
+- `authenticatorGetAssertion (0x02)` / `GetNextAssertion (0x08)`: resolves
   credentials from `allowList` or, for empty `allowList`, from resident credentials
   for the RP ID; **runs `verify_face()` per ceremony**; increments and persists the
   sign counter *before* returning the assertion; sets flags `UP|UV`.
-- `authenticatorSelection (0x0B)` — runs a short face check so browsers can
+- `authenticatorSelection (0x0B)`: runs a short face check so browsers can
   disambiguate between multiple authenticators.
-- `authenticatorReset (0x07)` — wipes the store; only permitted within the CTAP
+- `authenticatorReset (0x07)`: wipes the store; only permitted within the CTAP
   10-second-after-power-up window (i.e., daemon start) as the spec requires, plus a
   CLI equivalent (`linux-hello-cli webauthn clear`).
 - Unsupported commands/extensions → proper CTAP error codes
@@ -268,10 +268,10 @@ timeout).
 
 - uhid device: vendor/product strings "Linux Hello Virtual FIDO2", HID report descriptor
   = the canonical FIDO usage page descriptor (`0xF1D0/0x01`, 64-byte IN/OUT
-  reports) — byte-for-byte the one from the CTAP spec, as used by fido2-hid-bridge.
+  reports), byte-for-byte the one from the CTAP spec, as used by fido2-hid-bridge.
 - CTAPHID layer implements: channel allocation (`INIT`), fragmentation/reassembly
   (INIT/CONT frames), `PING`, `CBOR`, `MSG` (respond `CTAP1_ERR_INVALID_COMMAND`;
-  U2F/CTAP1 not offered — CTAP2-only capability flag `CAPABILITY_CBOR`, `NMSG` set),
+  U2F/CTAP1 not offered; CTAP2-only capability flag `CAPABILITY_CBOR`, `NMSG` set),
   `CANCEL` (aborts an in-flight face verification), `ERROR`, keepalives, busy
   handling (`ERR_CHANNEL_BUSY` for concurrent channels).
 - Long-running CTAP2 operations run in a worker thread; the uhid read loop stays
@@ -311,7 +311,7 @@ Credential record (JSON; binary fields base64url):
 }
 ```
 
-- `credential_id` is 16 random bytes (a pure lookup key — *not* key-wrapping
+- `credential_id` is 16 random bytes (a pure lookup key, *not* key-wrapping
   material, so no stateless-authenticator key-derivation scheme to get wrong).
   All credentials are stored server-side in the store; resident vs non-resident
   only controls whether the credential is discoverable with an empty `allowList`.
@@ -332,11 +332,11 @@ class KeyStore(ABC):
     def destroy_all(self) -> None               # for authenticatorReset
 ```
 
-- **SoftwareKeyStore (development keystore — clearly marked):** P-256 keys via
+- **SoftwareKeyStore (development keystore, clearly marked):** P-256 keys via
   `cryptography`; private keys are AES-256-GCM-encrypted (unique nonce per blob,
   key_ref as AAD) under a random master key in `/etc/linux-hello/webauthn/keystore/master.key`
   (0600 root). *Never plaintext on disk*, but the master key lives beside the data,
-  so at-rest protection reduces to root filesystem permissions — the same level as
+  so at-rest protection reduces to root filesystem permissions, the same level as
   Linux Hello's face models. Every surface (CLI `status`, docs, log line at daemon start)
   labels it `software (development)`.
 - **TpmKeyStore:** via `tpm2_pytss.ESAPI`:
@@ -370,8 +370,8 @@ class VerificationResult(enum.IntEnum):
 def verify_face(user: str, timeout: float | None = None) -> VerificationResult
 ```
 
-Implementation: spawn `python3 compare.py <user>` — *the identical contract the PAM
-module uses* — and map the exit status. Rationale:
+Implementation: spawn `python3 compare.py <user>` (the identical contract the PAM
+module uses) and map the exit status. Rationale:
 
 - zero risk to PAM/login/sudo (no changes to `compare.py` semantics);
 - inherits every Linux Hello feature for free (recorder plugins, rubberstamps, dark-frame
@@ -451,7 +451,7 @@ Browser sends authenticatorGetAssertion {rpId, clientDataHash, allowList?}
 ```
 
 RP-side verification then checks the signature against the registered public key,
-the rpIdHash, the UV flag, and counter regression — all standard WebAuthn L3; we
+the rpIdHash, the UV flag, and counter regression, all standard WebAuthn L3; we
 implement nothing RP-side.
 
 ### 6.3 What the user experiences
@@ -471,7 +471,7 @@ implement nothing RP-side.
   whose stored `rp_id` doesn't match the request. A credential for `example.com`
   can never answer for `evil.com`.
 - **Replay protection:** every assertion signs a fresh RP-chosen random challenge
-  (inside `clientDataHash`) — captured assertions cannot be replayed. The
+  (inside `clientDataHash`); captured assertions cannot be replayed. The
   monotonic, crash-safe sign counter lets RPs detect cloned credential stores.
 - **No secrets in transit:** the CTAPHID link carries public data + signatures
   only; private keys never cross it.
@@ -481,7 +481,7 @@ implement nothing RP-side.
 | Backend | Key at rest | Key in use | Compromise required |
 |---|---|---|---|
 | TPM | wrapped blob, unusable off-machine | inside TPM | root *and* runtime abuse of the live daemon; keys still not extractable |
-| Software (dev) | AES-256-GCM blob; master key 0600 root on same disk | process memory | root or offline disk read (unless FDE) — **explicitly a development keystore** |
+| Software (dev) | AES-256-GCM blob; master key 0600 root on same disk | process memory | root or offline disk read (unless FDE); **explicitly a development keystore** |
 
 Never logged (enforced convention + reviewed): private keys, wrapped blobs,
 credential IDs, assertion signatures, user handles, face encodings. Logs carry RP ID
@@ -493,12 +493,12 @@ and outcome only.
 |---|---|---|
 | Phishing site requests assertion | ✅ | Browser origin checks + rpIdHash binding |
 | Network attacker replays assertion | ✅ | RP challenge freshness; signature covers it |
-| Malicious local *unprivileged* process talks CTAP directly | ⚠️ | hidraw node is user-accessible (required for browsers), so any process in the user's session can request an assertion — but **every operation still requires a live face match in front of the camera**, and the GTK notice is shown. Equivalent to a physical key with fingerprint UV plugged in permanently. Residual: user-session malware could time a request while the user is at the camera; the visible prompt is the mitigation |
+| Malicious local *unprivileged* process talks CTAP directly | ⚠️ | hidraw node is user-accessible (required for browsers), so any process in the user's session can request an assertion, but **every operation still requires a live face match in front of the camera**, and the GTK notice is shown. Equivalent to a physical key with fingerprint UV plugged in permanently. Residual: user-session malware could time a request while the user is at the camera; the visible prompt is the mitigation |
 | Root compromise | ❌ out of scope | Root owns the store, config, and camera (same as PAM Linux Hello). TPM keeps keys non-exportable but a root attacker can use them while resident |
 | Photo/video presentation attack | ⚠️ | Inherited Linux Hello limitation: dlib matching has **no certified liveness detection**. IR-emitter cameras defeat printed photos; RGB-only cameras are weak. Mitigations: `rubberstamps` (nod/hotkey) apply to WebAuthn too because we reuse `compare.py`; documented prominently (§10) |
 | Coerced/unconscious user, camera pointed at victim (issue #1076) | ⚠️ | Same passive-biometric weakness as every face unlock; rubberstamp active gestures are the opt-in mitigation |
-| Cloned disk / stolen laptop | TPM: ✅ blobs unusable elsewhere; also detectable via sign counter. Software keystore: ❌ without FDE — documented |
-| Evil-maid replacement of face model | ⚠️ | Anyone with root can add a face model — pre-existing Linux Hello property, unchanged by this feature |
+| Cloned disk / stolen laptop | TPM: ✅ blobs unusable elsewhere; also detectable via sign counter. Software keystore: ❌ without FDE (documented) |
+| Evil-maid replacement of face model | ⚠️ | Anyone with root can add a face model; pre-existing Linux Hello property, unchanged by this feature |
 | Downgrade/UV-bypass by client | ✅ | UV is unconditional for every credential operation regardless of `uv`/`up` request options; there is no code path that signs without a fresh face match |
 
 ### 7.4 Honest classification
@@ -525,7 +525,7 @@ certified authenticators.
 | `tpm2-pkcs11` | Extra daemon/DB layer; python-fido2 doesn't need PKCS#11 | ✗ |
 | PCR-bound policies (boot-state sealing) | Valuable hardening; brittle across kernel updates | Future work |
 
-`fapi` vs `esys`: ESAPI (`tpm2_pytss.ESAPI`) chosen — lower-level but dependency-free
+`fapi` vs `esys`: ESAPI (`tpm2_pytss.ESAPI`) chosen; lower-level but dependency-free
 of FAPI config profiles, and the operations needed (CreatePrimary, Create, Load,
 Sign, FlushContext) are few.
 
@@ -533,7 +533,7 @@ Sign, FlushContext) are few.
 
 ## 9. Testing strategy
 
-Unit tests (pytest, no hardware, no root — everything injectable):
+Unit tests (pytest, no hardware, no root, everything injectable):
 
 - store: create/lookup/delete, per-RP resident queries, counter monotonicity,
   atomic persistence (crash-simulation via killed writer), flock exclusion.
@@ -553,7 +553,7 @@ Unit tests (pytest, no hardware, no root — everything injectable):
 - verification: exit-code mapping via stub `compare.py`.
 
 Integration tests (opt-in, need root/uhid): create the uhid device and drive it with
-python-fido2's *client* (`fido2.hid`) as if it were the browser — full
+python-fido2's *client* (`fido2.hid`) as if it were the browser: full
 register+assert loop against the running daemon (`tests/integration/`, skipped
 unless `LINUX_HELLO_WEBAUTHN_IT=1`).
 
@@ -569,7 +569,7 @@ Chromium.
 2. **Appears as a roaming (USB) authenticator**, not `platform` attachment; RPs
    filtering on `authenticatorAttachment: "platform"` won't offer it; RPs asking
    for `"cross-platform"` will (that's most security-key flows).
-3. **Self-attestation only** — RPs enforcing attestation allow-lists (rare outside
+3. **Self-attestation only**: RPs enforcing attestation allow-lists (rare outside
    enterprise) will reject registration.
 4. **Single-user per device instance;** multi-seat unsupported.
 5. **Software keystore is development-grade** (root-readable master key).
@@ -577,7 +577,7 @@ Chromium.
    no CTAP1/U2F fallback; ES256 only.
 7. **credentialsd/portal integration not yet implemented** (roadmap).
 8. Any process in the user's session with hidraw access can *initiate* a ceremony
-   (§7.3) — visible prompt + mandatory face match is the control.
+   (§7.3); visible prompt + mandatory face match is the control.
 
 ---
 
@@ -589,11 +589,11 @@ Chromium.
 | 2 | `webauthn/store.py`, `keystore.py`, `keystore_tpm.py` + tests | None |
 | 3 | `webauthn/authenticator.py` (CTAP2 core) + CLI (`init/register/authenticate/status/list/remove`) + tests; wire into `cli.py` (one `elif`) and config.ini (`[webauthn]`, disabled) | One-line dispatch addition |
 | 4 | `ctaphid.py`, `uhid.py`, `service.py`, systemd unit + udev rule (installed but disabled), meson `webauthn` install additions, docs/webauthn.md, browser verification | Packaging only |
-| Future | credentialsd D-Bus backend; hmac-secret/PRF; PCR-sealed TPM policies; EdDSA; credManagement API; liveness-oriented rubberstamp defaults for WebAuthn | — |
+| Future | credentialsd D-Bus backend; hmac-secret/PRF; PCR-sealed TPM policies; EdDSA; credManagement API; liveness-oriented rubberstamp defaults for WebAuthn | - |
 
 Dependencies (Arch): `python-fido2` (required for the feature), `python-tpm2-pytss` +
 `tpm2-tss` (optional, TPM backend), `python-cryptography` (already a transitive
-requirement of python-fido2). All are optional for Linux Hello itself — without them the
+requirement of python-fido2). All are optional for Linux Hello itself; without them the
 `linux-hello-cli webauthn` subcommand explains what to install and every existing feature is
 unaffected.
 

@@ -7,23 +7,23 @@
 > edges.
 
 Linux Hello unlocks your screen, authenticates sudo and polkit prompts with
-your face — no terminal configuration required. It is a fork of
+your face, no terminal configuration required. It is a fork of
 [Howdy](https://github.com/boltgolt/howdy) by boltgolt, rebuilt as a
 zero-config alternative: install it, open the GUI, enroll your face, done.
 
 ## Features
 
-- **Zero configuration** — cameras are auto-detected (IR first), the darkness
+- **Zero configuration**: cameras are auto-detected (IR first), the darkness
   threshold adapts to your lighting automatically, and sane defaults are used
   everywhere.
-- **"Linux Hello" GUI app** — a Qt desktop app that looks and feels native on
+- **"Linux Hello" GUI app**: a Qt desktop app that looks and feels native on
   KDE Plasma. Setup wizard, model management, settings and a live camera test,
   all without touching a terminal.
-- **PAM integration** — face authentication for KDE lock screen, login, sudo,
+- **PAM integration**: face authentication for KDE lock screen, login, sudo,
   su and polkit. Toggle per-service from the GUI.
-- **Pluggable recognition backends** — dlib on CPU, optional Intel OpenVINO
+- **Pluggable recognition backends**: dlib on CPU, optional Intel OpenVINO
   acceleration on iGPU, behind a common interface.
-- **WebAuthn (experimental)** — a virtual FIDO2 platform authenticator that
+- **WebAuthn (experimental)**: a virtual FIDO2 platform authenticator that
   lets your face unlock passkey logins in the browser.
 - **GPL-3.0 licensed**, forever free and open source.
 
@@ -59,7 +59,7 @@ meson setup build -Dbundled_python_dir="$(pwd)/build-runtime/linux-hello-runtime
 ```
 
 This adds ~400 MB to the install but removes every Python dependency from the
-host system — no `python-pyside6`, no `python-dlib`, no pip. The bundled
+host system: no `python-pyside6`, no `python-dlib`, no pip. The bundled
 interpreter is used by PAM, both CLI wrappers and the GUI, which also makes
 the install immune to interpreter upgrades on the target system.
 
@@ -85,22 +85,22 @@ settings page.
 
 ## Hardware notes
 
-- **ASUS laptops with Sonix IR cameras (USB ID `3277:0018`)** — the IR emitter
+- **ASUS laptops with Sonix IR cameras (USB ID `3277:0018`)**: the IR emitter
   is controlled by the laptop's proximity sensor, not a UVC control. The feed
   looks black until a person approaches. Do **not** run
   `linux-enable-ir-emitter configure` on these; it can wedge the USB bus and
   require a hard reboot (boltgolt/howdy#1109). The IR LED sits in the RGB
   camera cutout, so a privacy shutter can dim the IR feed.
-- **ThinkPad X1 Nano** — IR camera reports Y800 grayscale at 640x360 on
+- **ThinkPad X1 Nano**: IR camera reports Y800 grayscale at 640x360 on
   `/dev/video2`; auto dark-threshold detection handles the high baseline
   (boltgolt/howdy#1113).
-- **ThinkPad X1 Yoga / Carbon (Chicony)** — if the emitter never lights up,
+- **ThinkPad X1 Yoga / Carbon (Chicony)**: if the emitter never lights up,
   the `chicony-ir-toggle` tool or `linux-enable-ir-emitter` can enable it
   persistently.
-- **SELinux-enforcing systems (Fedora)** — the display manager domain
+- **SELinux-enforcing systems (Fedora)**: the display manager domain
   (`xdm_t`) needs `map` permission on `/dev/video*` or camera open fails only
   in GDM/lock-screen contexts (boltgolt/howdy#1117).
-- **Polkit >= 127** — the agent helper is sandboxed without device access; we
+- **Polkit >= 127**: the agent helper is sandboxed without device access; we
   ship a systemd drop-in that re-enables camera access. If prompts still
   fail, make sure the drop-in
   `/usr/lib/systemd/system/polkit-agent-helper@.service.d/10-linux-hello.conf`
@@ -113,9 +113,9 @@ settings page.
 Linux Hello is a fork of [Howdy](https://github.com/boltgolt/howdy) by
 boltgolt (MIT-licensed; see [NOTICE](NOTICE)).
 
-- [PR #1088](https://github.com/boltgolt/howdy/pull/1088) by **haleelrah** —
+- [PR #1088](https://github.com/boltgolt/howdy/pull/1088) by **haleelrah**:
   recog/ backend abstraction and PAM hardening
-- [PR #1125](https://github.com/boltgolt/howdy/pull/1125) by **qilsklo** —
+- [PR #1125](https://github.com/boltgolt/howdy/pull/1125) by **qilsklo**:
   WebAuthn virtual FIDO2 authenticator
 
 ## License

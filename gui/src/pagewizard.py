@@ -163,7 +163,7 @@ class WizardPage(QWidget):
 				"Found {} usable device{}.".format(len(results), "s" if len(results) != 1 else "")
 			)
 			for index, result in enumerate(results):
-				text = "{} — {}{} frames, {}% gray".format(
+				text = "{}: {}{} frames, {}% gray".format(
 					result["node"],
 					"IR (grayscale), " if result.get("saturation", 255) <= 16 else "",
 					result.get("frames", 0),
@@ -181,7 +181,7 @@ class WizardPage(QWidget):
 	def camera_chosen(self):
 		for button in self.camera_choices.buttons():
 			if button.isChecked():
-				self.selected_camera = button.text().split(" — ")[0]
+				self.selected_camera = button.text().split(": ")[0]
 				break
 
 		if self.selected_camera:

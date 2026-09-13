@@ -10,7 +10,7 @@
 #   <out>/python/lib/python3.12/site-packages/  bundled dependencies
 #
 # The resulting interpreter is referenced as `python_path` by the meson build,
-# so PAM, wrappers and the GUI all use it — the target machine needs nothing
+# so PAM, wrappers and the GUI all use it; the target machine needs nothing
 # from its own package repositories.
 #
 # Usage: tools/build_runtime.sh [--outdir DIR] [--arch x86_64|aarch64] [--no-dlib]

@@ -1,4 +1,4 @@
-# Linux Hello — main entry point.
+# Linux Hello: main entry point.
 # Modes:
 #   linux-hello               open the settings app
 #   linux-hello --start-auth-ui  show the authentication window (used by the PAM module)

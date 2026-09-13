@@ -38,14 +38,14 @@ signs the challenge.
 
 Because it presents as a roaming/USB authenticator rather than an internal
 one, the browser UI will say something like "Insert your security key" and
-"Use your security key" rather than "Use Windows Hello". That is expected —
+"Use your security key" rather than "Use Windows Hello". That is expected;
 see [Limitations](#limitations).
 
 ---
 
 ## Requirements
 
-- A working Linux Hello face setup — you must be able to run `sudo linux-hello-cli test`
+- A working Linux Hello face setup: you must be able to run `sudo linux-hello-cli test`
   and have it recognise you. If Linux Hello can't see your face, WebAuthn can't
   either.
 - Linux kernel with the `uhid` module (standard on Arch and most distros).
@@ -90,7 +90,7 @@ This installs, in addition to Linux Hello itself:
 | `/usr/lib/udev/rules.d/70-linux-hello-webauthn.rules` | `uaccess` rule so your browser can reach the virtual device |
 
 Without `-Dwith_webauthn=true`, none of these are installed and the Python
-modules simply sit unused — the ordinary `linux-hello-cli` command and PAM module are
+modules simply sit unused; the ordinary `linux-hello-cli` command and PAM module are
 byte-for-byte the same.
 
 ---
@@ -176,13 +176,13 @@ Once the service is running, go to any passkey demo or a real site's
 4. To log in, repeat: the browser prompts, you look at the camera, done.
 
 If the browser shows a PIN prompt instead of proceeding, it did not route to
-the virtual device — see [Troubleshooting](#troubleshooting).
+the virtual device, see [Troubleshooting](#troubleshooting).
 
 ### Firefox notes
 
 Firefox ≥ 114 supports USB CTAP2 authenticators natively. No `about:config`
 changes are normally needed. Very old versions gated this behind
-`security.webauthn.ctap2` — if you're on an old ESR, ensure it is `true`.
+`security.webauthn.ctap2`: if you're on an old ESR, ensure it is `true`.
 
 ### Chromium notes
 
@@ -227,7 +227,7 @@ convenience. It is classified as **convenience-grade**, not high-assurance.
 
 ### What it inherits from the standards
 
-- Real **CTAP2 / WebAuthn Level 3** protocol handling via `python-fido2` —
+- Real **CTAP2 / WebAuthn Level 3** protocol handling via `python-fido2`:
   no home-grown crypto or protocol.
 - **ES256 (ECDSA P-256)** credential keys.
 - **Per-credential key pairs**, scoped to the relying party (`rp_id`); a
@@ -244,7 +244,7 @@ convenience. It is classified as **convenience-grade**, not high-assurance.
     and never leave it. Only opaque wrapped blobs touch the disk; signing
     happens inside the TPM.
   - **Software keystore:** keys are encrypted at rest with **AES-256-GCM**
-    under a master key in a `0600` file. This is **development-grade** —
+    under a master key in a `0600` file. This is **development-grade**:
     the master key is protected only by filesystem permissions, so a root
     compromise or offline disk access defeats it. `status` and `init` both
     warn about this. **Prefer the TPM keystore for anything real.**
@@ -256,14 +256,14 @@ convenience. It is classified as **convenience-grade**, not high-assurance.
 
 Every `make_credential` and `get_assertion` calls the **same `compare.py`**
 face check the PAM module uses, **immediately before** the key is used. There
-is no caching or "remember me" window — no face match, no signature.
+is no caching or "remember me" window: no face match, no signature.
 
 ### What we never log
 
 Private keys, credential IDs, assertion signatures, raw biometric
 embeddings, and authentication secrets are **never** written to logs.
 
-### Threat model — know the limits
+### Threat model: know the limits
 
 - **Biometrics are not secrets.** A face is not a password; anti-spoofing
   depends entirely on your camera.
@@ -300,7 +300,7 @@ authenticator, and you should not present it to others as such.
 - **RGB cameras give weak anti-spoofing** (see above).
 - **Software keystore is development-grade** (see above).
 - **No browser autofill "platform passkey" integration** (e.g. the
-  credentialsd / linux-credentials D-Bus portal) yet — that's on the
+  credentialsd / linux-credentials D-Bus portal) yet; that's on the
   roadmap.
 
 ---
@@ -326,9 +326,9 @@ Module layout under `linux-hello/src/`:
 |------|----------------|
 | `verification.py` | Internal face-verification API (`verify_face`, `FaceVerifier`, `BoundVerifier`) wrapping `compare.py`. Introduced by the Phase 1 refactor; PAM is untouched. |
 | `webauthn/authenticator.py` | CTAP2 authenticator core: `make_credential`, `get_assertion`, `get_info`, etc. Calls the verifier before every key use. |
-| `webauthn/store.py` | `CredentialStore` — credential metadata, RP scoping, sign-counter persistence, atomic + locked writes. |
-| `webauthn/keystore.py` | `SoftwareKeyStore` — AES-256-GCM encrypted P-256 keys (development-grade). |
-| `webauthn/keystore_tpm.py` | `TpmKeyStore` — keys generated and used inside a TPM 2.0 via `tpm2_pytss`. Optional import. |
+| `webauthn/store.py` | `CredentialStore`: credential metadata, RP scoping, sign-counter persistence, atomic + locked writes. |
+| `webauthn/keystore.py` | `SoftwareKeyStore`: AES-256-GCM encrypted P-256 keys (development-grade). |
+| `webauthn/keystore_tpm.py` | `TpmKeyStore`: keys generated and used inside a TPM 2.0 via `tpm2_pytss`. Optional import. |
 | `webauthn/ctaphid.py` | CTAPHID transport: framing, channels, keepalives, CBOR dispatch, cancel. |
 | `webauthn/uhid.py` | `/dev/uhid` virtual HID device with a FIDO usage-page report descriptor. |
 | `webauthn/service.py` | Daemon loop: builds the authenticator, creates the uhid device, pumps reports. |
@@ -337,7 +337,7 @@ Module layout under `linux-hello/src/`:
 
 The stack is verified end to end by `tests/integration/test_end_to_end.py`,
 which drives it with **python-fido2's own CTAP2 client** over an in-memory
-loopback — proving interoperability with an independent implementation
+loopback, proving interoperability with an independent implementation
 without needing root or `/dev/uhid`.
 
 ### Running the tests

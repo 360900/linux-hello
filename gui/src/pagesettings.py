@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 import cli_bridge
 import pam_services
 
-# (key, label, kind, extra) — kind: bool, invbool, int, float, str, choice
+# (key, label, kind, extra); kind: bool, invbool, int, float, str, choice
 SETTINGS = [
 	("disabled", "Face authentication enabled (unchecked = disabled)", "invbool"),
 	("no_confirmation", "Authenticate without confirmation after success", "bool"),
