@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 	QLabel,
 	QPushButton,
 	QVBoxLayout,
+	QWidget,
 )
 
 import cli_bridge

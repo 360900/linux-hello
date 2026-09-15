@@ -38,45 +38,102 @@ zero-config alternative: install it, open the GUI, enroll your face, done.
 | WebAuthn authenticator | Experimental, off by default |
 | Packaging | Debian + Arch (unofficial), untested on real systems |
 
-Runtime dependencies (dlib, OpenCV, PySide6) are not yet bundled or packaged;
-there are no release tarballs yet. For now this repository is for development,
-testing and review.
+Python dependencies (OpenCV, dlib, PySide6) can be shipped inside a
+self-contained runtime, see [Building from source](#building-from-source).
+There are no release tarballs yet, so for now this repository is for
+development, testing and review.
 
 ## Building from source
 
-Requirements: `meson`, `ninja`, a C++ compiler and `gcc`-compatible toolchain.
+There are two ways to build. The **bundled runtime** ships its own CPython plus
+every Python dependency; the **system Python** build uses your distro's
+interpreter and packages. Both produce the same PAM module, CLI and GUI.
 
-**Bundled runtime (recommended).** Linux Hello can ship its own CPython plus
-every Python dependency (OpenCV, dlib, NumPy, PySide6, cryptography, fido2)
-inside the package, so the target machine needs nothing from its package
-repositories. All downloads are SHA256-pinned in `tools/runtime-manifest.json`;
-dlib is compiled from source against the bundled interpreter (no CUDA, no GUI
-layer):
+### 1. Build dependencies
+
+All builds need: a C++20 compiler, `meson` (>= 0.60), `ninja`, `pkg-config`,
+`gettext` (translations) and the headers for `libpam`, `libevdev` and
+`inih`/`INIReader`.
+
+The bundled runtime additionally needs `curl` (or `wget`), `tar`, `python3`,
+`cmake` and network access: dlib is compiled from source against the bundled
+interpreter (no CUDA, no GUI layer), and every download is SHA256-pinned in
+`tools/runtime-manifest.json`.
+
+Arch / CachyOS:
+
+```sh
+sudo pacman -S --needed base-devel meson ninja gettext pkgconf \
+	libevdev libinih cmake curl ccache
+```
+
+Debian / Ubuntu:
+
+```sh
+sudo apt install build-essential meson ninja-build gettext pkg-config \
+	libpam0g-dev libevdev-dev libinih-dev cmake curl python3
+```
+
+Fedora:
+
+```sh
+sudo dnf install gcc-c++ meson ninja-build gettext pkgconf-pkg-config \
+	pam-devel libevdev-devel inih-devel cmake curl python3
+```
+
+### 2. Runtime dependencies
+
+**Bundled runtime: none from your repositories.** No `python3-opencv`, no
+`python3-dlib`, no `python3-pyside6`, no pip. The cost is ~400 MB of installed
+size and immunity to interpreter upgrades on the target machine. The GUI still
+uses the system X11/Wayland client libraries, which any desktop install already
+has (`libxcb`, `libxcb-cursor`, `libxkbcommon`, `libwayland-client`, `mesa`).
+
+**System Python build** needs distro packages instead:
+
+```sh
+# Debian / Ubuntu
+sudo apt install python3-opencv python3-dlib python3-numpy \
+	python3-pyside6 python3-fido2 python3-cryptography
+# Arch / CachyOS
+sudo pacman -S --needed python-opencv python-dlib python-numpy \
+	python-pyside6 python-fido2 python-cryptography
+```
+
+`python3-pyside6` is only needed for the GUI, `python3-fido2` +
+`python3-cryptography` only for WebAuthn.
+
+### 3. Configure, compile, install
+
+Bundled runtime (recommended):
 
 ```sh
 tools/build_runtime.sh --outdir build-runtime
 meson setup build -Dbundled_python_dir="$(pwd)/build-runtime/linux-hello-runtime"
+ninja -C build
+sudo ninja -C build install
 ```
 
-This adds ~400 MB to the install but removes every Python dependency from the
-host system: no `python-pyside6`, no `python-dlib`, no pip. The bundled
-interpreter is used by PAM, both CLI wrappers and the GUI, which also makes
-the install immune to interpreter upgrades on the target system.
-
-**System Python.** Alternatively, build against the host interpreter and rely
-on distro packages:
+System Python:
 
 ```sh
 meson setup build
+ninja -C build
+sudo ninja -C build install
 ```
 
-Runtime deps in that case: `python3-opencv`, `python3-dlib`, `numpy`,
-`python3-pyside6` (GUI), `python3-fido2` + `python3-cryptography` (WebAuthn).
-
-Build options (see `meson.options` for the full list):
+Other build options (see `meson.options` for the full list):
 
 ```sh
 meson configure build -Dwith_webauthn=false -Dinstall_config=false
+```
+
+Handy follow-ups:
+
+```sh
+ninja -C build && sudo ninja -C build install   # rebuild after editing
+sudo ninja -C build uninstall                   # remove again
+sudo systemctl daemon-reload                    # see the Polkit note below
 ```
 
 After installing, run the GUI app **Linux Hello** (or `linux-hello-cli` from a

@@ -129,3 +129,8 @@ debian/.debhelper/
 
 # Meson
 subprojects/
+
+# Meson build directories (build, build3, ...) and the bundled runtime
+# produced by tools/build_runtime.sh
+/build*/
+/build-runtime/

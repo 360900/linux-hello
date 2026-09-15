@@ -3,6 +3,15 @@
 # Launch the Linux Hello settings app.
 # Not running as root? Elevate through polkit so models and the system
 # config can be managed without a terminal.
+#
+# Qt picks the xcb plugin whenever DISPLAY is set, which fails on a Wayland
+# session with no X server, so ask for Wayland explicitly. Honoured by the
+# caller; pkexec wipes the environment anyway, main.py rebuilds it there.
+if [ -z "$QT_QPA_PLATFORM" ] && [ -n "$WAYLAND_DISPLAY" ]; then
+	QT_QPA_PLATFORM=wayland
+	export QT_QPA_PLATFORM
+fi
+
 if [ "$(id -u)" != "0" ] && command -v pkexec >/dev/null 2>&1; then
 	exec pkexec @python_path@ "@script_path@" "$@"
 fi
