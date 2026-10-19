@@ -62,13 +62,17 @@ class Manager:
 	async def _camera(self, caller, work):
 		"""Run blocking camera work in a thread, cancellable by the caller"""
 		cancel = threading.Event()
-		async with self.camera_lock:
-			self.running[caller.sender] = cancel
-			try:
+		# Registered before waiting for the camera, so a caller that leaves
+		# while queued is cancelled too
+		self.running[caller.sender] = cancel
+		try:
+			async with self.camera_lock:
+				if cancel.is_set():
+					raise Failed("Cancelled", "Cancelled before the camera was free")
 				self.engine.config = settings.load()
 				return await asyncio.to_thread(work, cancel)
-			finally:
-				self.running.pop(caller.sender, None)
+		finally:
+			self.running.pop(caller.sender, None)
 
 	# -- status ----------------------------------------------------------------
 	async def get_status(self, caller):

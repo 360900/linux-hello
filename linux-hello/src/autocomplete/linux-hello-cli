@@ -1,0 +1,30 @@
+# bash completion for linux-hello-cli
+
+_linux_hello_cli() {
+	local cur prev
+	COMPREPLY=()
+	cur="${COMP_WORDS[COMP_CWORD]}"
+	prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+	case "${prev}" in
+		linux-hello-cli)
+			COMPREPLY=( $(compgen -W "status doctor list add remove rename clear targets enable disable set cameras test snapshot config reset-system webauthn version" -- "${cur}") )
+			return 0
+			;;
+		enable|disable)
+			COMPREPLY=( $(compgen -W "lock-screen admin sudo login" -- "${cur}") )
+			return 0
+			;;
+		-U|--user)
+			COMPREPLY=( $(compgen -u -- "${cur}") )
+			return 0
+			;;
+	esac
+
+	if [[ "${cur}" == -* ]]; then
+		COMPREPLY=( $(compgen -W "--user -y --json --plain --section --purge --help" -- "${cur}") )
+	fi
+	return 0
+}
+
+complete -F _linux_hello_cli linux-hello-cli

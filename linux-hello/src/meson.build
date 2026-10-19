@@ -27,17 +27,12 @@ py_paths = configure_file(
 
 py_sources = [
     'cli/__init__.py',
-    'cli/add.py',
-    'cli/clear.py',
     'cli/config.py',
-    'cli/disable.py',
-    'cli/list.py',
-    'cli/remove.py',
-    'cli/set.py',
     'cli/snap.py',
     'cli/test.py',
     'cli/webauthn.py',
     'cli.py',
+    'client.py',
     'compare.py',
     'daemon/__init__.py',
     'daemon/access.py',
@@ -126,13 +121,8 @@ else
 endif
 
 install_data('logo.png', install_tag: 'meta')
-autocomplete = configure_file(
-    input: 'autocomplete/linux-hello-cli.in',
-    output: 'autocomplete',
-    configuration: configuration_data({ 'config_path': config_path })
-)
 install_data(
-    autocomplete,
+    'autocomplete/linux-hello-cli',
     install_dir: join_paths(get_option('prefix'), get_option('datadir'), 'bash-completion', 'completions'),
     install_mode: 'rw-r--r--',
     install_tag: 'bash_completion',

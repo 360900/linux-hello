@@ -1,47 +1,55 @@
-.\" Please adjust this date whenever revising the manpage.
-.TH LINUX-HELLO-CLI 1 "April 9, 2018" "Linux Hello help" "User Commands"
+.TH LINUX-HELLO-CLI 1 "October 2026" "Linux Hello" "User Commands"
 .SH NAME
-linux-hello-cli \- Windows Hello style authentication for Linux
+linux-hello-cli \- manage face authentication
+.SH SYNOPSIS
+.B linux-hello-cli
+[\fB\-U\fR \fIUSER\fR] [\fB\-y\fR] [\fB\-\-json\fR] \fIcommand\fR [\fIargument\fR...]
 .SH DESCRIPTION
-Linux Hello IR face recognition implements a PAM module to use your face as a authentication method.
-.SS "Usage:"
-.IP
-linux-hello-cli [\-U USER] [\-y] [\-h] command [argument]
-.SS "Commands:"
+Front end for the Linux Hello service. Model, target and setting commands
+need no root; polkit asks for a password where needed. Commands marked
+(root) open the camera or edit files directly.
+.SH COMMANDS
 .TP
-add
-Add a new face model for an user.
+.B status
+Service state and whether your face is enrolled.
 .TP
-clear
-Remove all face models for an user.
+.B doctor
+Check camera, data files, models and PAM targets.
 .TP
-config
-Open the config file in gedit.
+.BR list ", " add " [\fIlabel\fR], " remove " \fIid\fR, " rename " \fIid label\fR, " clear
+Manage the face models of the user.
 .TP
-disable
-Disable or enable linux-hello-cli.
+.B targets
+Show where face unlock can be used.
 .TP
-list
-List all saved face models for an user.
+.BR enable ", " disable " \fItarget\fR"
+Use face unlock for \fBlock-screen\fR, \fBadmin\fR (polkit), \fBsudo\fR or \fBlogin\fR, or stop.
 .TP
-remove
-Remove a specific model for an user.
+.B set \fR[\fB\-\-section\fR \fIsection\fR] \fIoption value\fR
+Change a setting. Local settings live in /etc/linux-hello/config.ini, the
+documented defaults in /usr/share/linux-hello/config.ini.
 .TP
-clear
-Remove all face models for an user.
+.B cameras
+List usable cameras, best first.
 .TP
-test
-Test the camera and recognition methods.
-.SS "Optional arguments:"
+.BR test ", " snapshot " (root)"
+Live camera preview, or save a snapshot.
 .TP
-\fB\-U\fR USER, \fB\-\-user\fR USER
-Set the user account to use.
+.B config \fR(root)
+Edit the local settings file.
 .TP
-\fB\-y\fR
-Skip all questions.
+.B reset-system \fR[\fB\-\-purge\fR] (root)
+Undo every PAM change made by Linux Hello. With \fB\-\-purge\fR also delete
+face models, settings and logs.
+.SH OPTIONS
 .TP
-\fB\-h\fR, \fB\-\-help\fR
-Show this help message and exit.
-.PP
-.SH AUTHOR
-Linux Hello was written by boltgolt. For more information visit https://github.com/360900/linux-hello
+\fB\-U\fR, \fB\-\-user\fR \fIUSER\fR
+Act on another user's models (needs admin).
+.TP
+.B \-y
+Skip confirmations.
+.TP
+.B \-\-json
+Machine readable output.
+.SH SEE ALSO
+https://github.com/360900/linux-hello

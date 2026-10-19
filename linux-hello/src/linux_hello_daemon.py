@@ -19,7 +19,7 @@ if "LINUX_HELLO_BLAS_THREADS" not in os.environ:
 	os.environ["OMP_NUM_THREADS"] = "1"
 	os.environ["GOTO_NUM_THREADS"] = "1"
 
-from dbus_fast import BusType, RequestNameReply
+from dbus_fast import BusType, Message, MessageType, RequestNameReply
 from dbus_fast.aio import MessageBus
 
 from daemon.access import Access
@@ -58,6 +58,23 @@ async def serve(bus_type=BusType.SYSTEM, idle_timeout=600, bus_address=None, sto
 
 	dispatcher.on_activity = touch
 	dispatcher.install()
+
+	# A caller that leaves the bus (Ctrl+C, closed window) cancels its
+	# request, so an abandoned enrolment is never saved
+	def caller_gone(message):
+		if (message.message_type == MessageType.SIGNAL and message.member == "NameOwnerChanged"
+				and message.sender == "org.freedesktop.DBus"):
+			name, _old, new = message.body
+			if not new and name in manager.running:
+				log.info("%s left, cancelling its request", name)
+				manager.running[name].set()
+
+	bus.add_message_handler(caller_gone)
+	await bus.call(Message(
+		destination="org.freedesktop.DBus", path="/org/freedesktop/DBus", interface="org.freedesktop.DBus",
+		member="AddMatch", signature="s",
+		body=["type='signal',sender='org.freedesktop.DBus',member='NameOwnerChanged',arg2=''"],
+	))
 
 	reply = await bus.request_name(BUS_NAME)
 	if reply not in (RequestNameReply.PRIMARY_OWNER, RequestNameReply.ALREADY_OWNER):
