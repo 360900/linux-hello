@@ -4,6 +4,7 @@
 # thread, one request at a time. Everything else is quick file access.
 
 import asyncio
+import logging
 import os
 import threading
 import time
@@ -18,6 +19,8 @@ from daemon.dispatch import Failed
 from engine import Engine
 from integration.pam import PamError, PamIntegration
 from verification import VerificationResult
+
+log = logging.getLogger("linux-hello.manager")
 
 VERSION = "0.1"
 ENROLL_SAMPLES = 5
@@ -113,6 +116,7 @@ class Manager:
 
 		result, stats = await self._camera(caller, work)
 		certainty = stats.as_dict()["best_certainty"]
+		log.info("uid %d: verified %s: %s, best certainty %s", caller.uid, user, VerificationResult(result).name, certainty)
 		return [int(result), -1.0 if certainty is None else float(certainty)]
 
 	# -- enrolment -------------------------------------------------------------
@@ -146,11 +150,13 @@ class Manager:
 
 		result, encodings, _stats = await self._camera(caller, work)
 		if result != VerificationResult.SUCCESS:
+			log.info("uid %d: enrolment for %s ended with %s", caller.uid, user, VerificationResult(result).name)
 			return [int(result), 0]
 
 		if not label.strip():
 			label = "Face {}".format(len(existing) + 1)
 		model = model_store.add(user, label, encodings, time.time())
+		log.info("uid %d: added face model %d for %s", caller.uid, model["id"], user)
 		self.emit("ModelsChanged", "s", [user])
 		return [int(result), model["id"]]
 
@@ -171,6 +177,7 @@ class Manager:
 		await self.access.require_self_or_admin(caller, user, ACTION_ENROLL_SELF)
 		if not model_store.rename(user, model_id, label):
 			raise Failed("NotFound", "No model {} for {}".format(model_id, user))
+		log.info("uid %d: renamed face model %d of %s", caller.uid, model_id, user)
 		self.emit("ModelsChanged", "s", [user])
 		return []
 
@@ -179,6 +186,7 @@ class Manager:
 		await self.access.require_self_or_admin(caller, user, ACTION_ENROLL_SELF)
 		if not model_store.remove(user, model_id):
 			raise Failed("NotFound", "No model {} for {}".format(model_id, user))
+		log.info("uid %d: removed face model %d of %s", caller.uid, model_id, user)
 		self.emit("ModelsChanged", "s", [user])
 		return []
 
@@ -201,7 +209,9 @@ class Manager:
 			else:
 				self.pam.disable(target)
 		except PamError as error:
+			log.warning("uid %d: could not %s %s: %s", caller.uid, "enable" if enabled else "disable", target, error)
 			raise Failed("Failed", str(error))
+		log.info("uid %d: %s face unlock for %s", caller.uid, "enabled" if enabled else "disabled", target)
 		self.emit("TargetsChanged", "", [])
 		return []
 
@@ -221,6 +231,7 @@ class Manager:
 			settings.set_value(key, value, section=section)
 		except settings.SettingsError as error:
 			raise Failed("InvalidArgs", str(error))
+		log.info("uid %d: set %s.%s = %s", caller.uid, section, key, value)
 		self.emit("SettingsChanged", "", [])
 		return []
 

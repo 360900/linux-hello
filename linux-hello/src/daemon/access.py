@@ -4,11 +4,14 @@
 # and enrolment actions go through polkit with interaction allowed, so the
 # desktop's polkit agent shows a password (or face) prompt when needed.
 
+import logging
 import pwd
 
 from dbus_fast import Message, MessageType, Variant
 
 from daemon.dispatch import Caller, Failed
+
+log = logging.getLogger("linux-hello.access")
 
 ACTION_ENROLL_SELF = "io.github.linuxhello.enroll-self"
 ACTION_MANAGE_USERS = "io.github.linuxhello.manage-users"
@@ -57,6 +60,7 @@ class Access:
 
 	async def require(self, caller, action):
 		if not await self.authorized(caller, action):
+			log.warning("uid %d was not authorized for %s", caller.uid, action)
 			raise Failed("PermissionDenied", "Not authorized for {}".format(action))
 
 	# -- composite rules ---------------------------------------------------
