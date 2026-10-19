@@ -59,6 +59,7 @@ py_sources = [
     'webauthn_daemon.py',
     'linux_hello_daemon.py',
     'recorders/__init__.py',
+    'recorders/device_discovery.py',
     'recorders/errors.py',
     'recorders/ffmpeg_reader.py',
     'recorders/pyv4l2_reader.py',
