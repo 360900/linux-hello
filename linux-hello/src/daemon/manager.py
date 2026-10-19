@@ -295,6 +295,10 @@ class Manager:
 		else:
 			add("targets", "warning", "Face unlock is not enabled anywhere yet")
 
+		modules = _pam_modules()
+		if len(modules) > 1:
+			add("duplicates", "warning", "Several PAM modules installed, remove the stale ones: " + ", ".join(modules))
+
 		if _selinux_enforcing():
 			add("selinux", "info", "SELinux is enforcing; if the camera fails, check the audit log")
 		return [checks]
@@ -305,6 +309,23 @@ def _dlib_data_present():
 		paths_factory.shape_predictor_5_face_landmarks_path(),
 		paths_factory.dlib_face_recognition_resnet_model_v1_path(),
 	))
+
+
+PAM_MODULE_DIRS = (
+	"/usr/lib/security", "/usr/lib64/security", "/lib/security", "/lib64/security",
+	"/usr/lib/x86_64-linux-gnu/security", "/usr/lib/aarch64-linux-gnu/security",
+	"/usr/local/lib/security", "/usr/local/lib64/security",
+)
+
+
+def _pam_modules(directories=PAM_MODULE_DIRS):
+	"""Distinct pam_linux_hello.so files; /lib and /usr/lib are often one"""
+	found = {}
+	for directory in directories:
+		path = os.path.join(directory, "pam_linux_hello.so")
+		if os.path.isfile(path):
+			found.setdefault(os.path.realpath(path), path)
+	return sorted(found.values())
 
 
 def _camera_name(node):

@@ -325,3 +325,20 @@ def test_service_over_dbus(env, private_bus):
 	# The sudo target stayed untouched
 	with open(os.path.join(env, "etc/pam.d/sudo")) as file:
 		assert "linux-hello" not in file.read()
+
+
+def test_duplicate_pam_modules_are_found(env, tmp_path):
+	from daemon.manager import _pam_modules
+
+	usr = tmp_path / "usr/lib/security"
+	local = tmp_path / "usr/local/lib/security"
+	usr.mkdir(parents=True)
+	local.mkdir(parents=True)
+	(usr / "pam_linux_hello.so").write_bytes(b"new")
+	(tmp_path / "lib").symlink_to(tmp_path / "usr/lib")
+	directories = [str(usr), str(tmp_path / "lib/security"), str(local)]
+
+	# /lib/security is the same file through a symlink
+	assert _pam_modules(directories) == [str(usr / "pam_linux_hello.so")]
+	(local / "pam_linux_hello.so").write_bytes(b"old")
+	assert len(_pam_modules(directories)) == 2

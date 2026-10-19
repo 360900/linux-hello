@@ -221,12 +221,24 @@ install_data(
     install_tag: 'bin',
 )
 
+# Directories under /var/lib, /etc and /var/log are created by systemd
+# itself; custom locations elsewhere must exist already
+writable_dirs = []
+foreach dir : [
+    [paths_dict.get('state_dir'), '/var/lib/', 'StateDirectory', '0700'],
+    [paths_dict.get('config_dir'), '/etc/', 'ConfigurationDirectory', '0755'],
+    [paths_dict.get('log_path'), '/var/log/', 'LogsDirectory', '0755'],
+]
+    if dir[0].startswith(dir[1])
+        writable_dirs += '@0@=@1@\n@0@Mode=@2@'.format(dir[2], dir[0].replace(dir[1], ''), dir[3])
+    else
+        writable_dirs += 'ReadWritePaths=-' + dir[0]
+    endif
+endforeach
+
 daemon_conf = configuration_data({
     'daemon_path': daemon_path,
-    'mkdir': find_program('mkdir').full_path(),
-    'state_dir': paths_dict.get('state_dir'),
-    'config_dir': paths_dict.get('config_dir'),
-    'log_path': paths_dict.get('log_path'),
+    'writable_dirs': '\n'.join(writable_dirs),
 })
 install_data(
     configure_file(

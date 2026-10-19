@@ -63,6 +63,16 @@ def invoking_user():
 	return getpass.getuser()
 
 
+def cli_copies():
+	"""Distinct linux-hello-cli executables on PATH, in lookup order"""
+	found = {}
+	for directory in os.environ.get("PATH", "").split(os.pathsep):
+		path = os.path.join(directory, "linux-hello-cli")
+		if os.path.isfile(path) and os.access(path, os.X_OK):
+			found.setdefault(os.path.realpath(path), path)
+	return list(found.values())
+
+
 def build_parser():
 	parser = argparse.ArgumentParser(
 		prog="linux-hello-cli",
@@ -132,6 +142,10 @@ def cmd_status(client, args):
 
 def cmd_doctor(client, args):
 	checks = client.call("Diagnose")[0]
+	copies = cli_copies()
+	if len(copies) > 1:
+		checks.append(["duplicates-cli", "warning",
+			_("Several linux-hello-cli on PATH, {} runs first: {}").format(copies[0], ", ".join(copies))])
 	if args.json:
 		emit_json([{"check": c, "state": s, "message": m} for c, s, m in checks])
 	else:

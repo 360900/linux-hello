@@ -8,11 +8,10 @@ BusName=io.github.LinuxHello1
 ExecStart=@daemon_path@
 
 # The service only needs the camera, its own state, the config and the PAM
-# service files it manages. "+" runs the setup outside the sandbox, so the
-# directories exist before ProtectSystem=strict makes their parents read-only.
-ExecStartPre=+@mkdir@ -p -m 0700 @state_dir@
-ExecStartPre=+@mkdir@ -p -m 0755 @config_dir@ @log_path@
-ReadWritePaths=@state_dir@ @config_dir@ @log_path@ /etc/pam.d
+# service files it manages. systemd creates the directories below before
+# ProtectSystem=strict makes their parents read-only.
+@writable_dirs@
+ReadWritePaths=/etc/pam.d
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes

@@ -205,3 +205,25 @@ def test_abandoned_enrolment_is_not_saved(service):
 	assert cli.engine.cancelled
 	assert cli.managers[0].running == {}
 	assert model_store.load(ME) == []
+
+
+def test_cli_copies_dedupes_symlinks(tmp_path, monkeypatch):
+	# By path: the cli/ package next to cli.py wins a plain import
+	import importlib.util
+	spec = importlib.util.spec_from_file_location("cli_main", os.path.join(SRC, "cli.py"))
+	cli = importlib.util.module_from_spec(spec)
+	spec.loader.exec_module(cli)
+
+	usr_bin = tmp_path / "usr/bin"
+	local_bin = tmp_path / "usr/local/bin"
+	for directory in (usr_bin, local_bin):
+		directory.mkdir(parents=True)
+		executable = directory / "linux-hello-cli"
+		executable.write_text("#!/bin/sh\n")
+		executable.chmod(0o755)
+	(tmp_path / "bin").symlink_to(usr_bin)
+
+	monkeypatch.setenv("PATH", os.pathsep.join([str(usr_bin), str(tmp_path / "bin")]))
+	assert cli.cli_copies() == [str(usr_bin / "linux-hello-cli")]
+	monkeypatch.setenv("PATH", os.pathsep.join([str(local_bin), str(usr_bin), str(tmp_path / "bin")]))
+	assert cli.cli_copies() == [str(local_bin / "linux-hello-cli"), str(usr_bin / "linux-hello-cli")]
