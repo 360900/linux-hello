@@ -1,0 +1,20 @@
+#%PAM-1.0
+
+# Block login if they are globally disabled
+auth      requisite       pam_nologin.so
+auth      required        pam_succeed_if.so user != root quiet_success
+
+@include common-auth
+-auth     optional        pam_kwallet5.so
+
+@include common-account
+
+# SELinux needs to be the first session rule.
+session   [success=ok ignore=ignore module_unknown=ignore default=bad] pam_selinux.so close
+session   required        pam_loginuid.so
+session   required        pam_limits.so
+@include common-session
+-session  optional        pam_kwallet5.so auto_start
+session   [success=ok ignore=ignore module_unknown=ignore default=bad] pam_selinux.so open
+
+@include common-password

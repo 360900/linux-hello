@@ -1,0 +1,7 @@
+#%PAM-1.0
+auth       substack     fingerprint-auth
+auth       include      postlogin
+account    required     pam_nologin.so
+account    include      fingerprint-auth
+password   required     pam_deny.so
+session    include      fingerprint-auth
