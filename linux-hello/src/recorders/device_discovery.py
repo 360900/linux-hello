@@ -200,22 +200,14 @@ def discover_cameras(probe_all=True, per_device_timeout=2.0):
 	return results
 
 
-# The daemon keeps running between requests: remember the pick instead of
-# opening every camera again for each authentication
-_autodetected = None
-
-
-def autodetect_device(verbose=False, use_cache=True):
+def autodetect_device(verbose=False):
 	"""
 	Pick the best camera device path for Linux Hello. Infrared cameras are
 	tried first and colour cameras are only opened when no infrared one
-	works. Returns the device path string, or None when no usable camera
-	exists.
+	works. Runs on every attempt on purpose: a cached pick would stick to
+	the webcam after the IR camera was missing once, even once it is back.
+	Returns the device path string, or None when no usable camera exists.
 	"""
-	global _autodetected
-	if use_cache and _autodetected and os.path.exists(_autodetected):
-		return _autodetected
-
 	results = discover_cameras(probe_all=False)
 	if not any(r.get("ok") for r in results):
 		# Advertised IR devices did not deliver frames: try everything
@@ -226,12 +218,5 @@ def autodetect_device(verbose=False, use_cache=True):
 			print("Probed {}: {}".format(result["node"],
 				"usable" if result.get("ok") else "unusable"))
 		if result.get("ok"):
-			_autodetected = result["path"]
-			return _autodetected
+			return result["path"]
 	return None
-
-
-def forget_autodetected():
-	"""Drop the cached pick, for example after the camera failed to open"""
-	global _autodetected
-	_autodetected = None

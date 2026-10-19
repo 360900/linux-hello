@@ -30,7 +30,6 @@ def fake(monkeypatch):
 	monkeypatch.setattr(discovery, "probe_device", probe)
 	monkeypatch.setattr(discovery, "stable_path", lambda node: "/dev/v4l/by-path/" + node[5:])
 	monkeypatch.setattr(discovery.os.path, "exists", lambda path: True)
-	discovery.forget_autodetected()
 	return opened, frames
 
 
@@ -40,14 +39,19 @@ def test_autodetect_never_opens_the_webcam_when_ir_exists(fake):
 	assert opened == ["/dev/video2"]
 
 
-def test_autodetect_is_cached(fake):
+def test_reconnected_ir_camera_wins_again(fake, monkeypatch):
 	opened, _frames = fake
-	discovery.autodetect_device()
-	discovery.autodetect_device()
+	# Booted with the IR camera unplugged: the webcam is the only choice
+	monkeypatch.setitem(DEVICES, "/dev/video2", None)
+	monkeypatch.setattr(discovery, "candidate_nodes", lambda: ["/dev/video0", "/dev/video1"])
+	assert discovery.autodetect_device() == "/dev/v4l/by-path/video0"
+
+	# Plugged back in: the very next attempt uses it, without a restart
+	monkeypatch.setattr(discovery, "candidate_nodes", lambda: list(DEVICES))
+	monkeypatch.setitem(DEVICES, "/dev/video2", ["GREY"])
+	opened.clear()
+	assert discovery.autodetect_device() == "/dev/v4l/by-path/video2"
 	assert opened == ["/dev/video2"]
-	discovery.forget_autodetected()
-	discovery.autodetect_device()
-	assert opened == ["/dev/video2", "/dev/video2"]
 
 
 def test_falls_back_to_rgb_when_ir_gives_no_frames(fake):

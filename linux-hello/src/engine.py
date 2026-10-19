@@ -23,12 +23,6 @@ SAMPLE_SPACING = 0.35
 MIN_FACE_SHARE = 0.18
 
 
-def _forget_camera():
-	"""A failed camera may have been the cached automatic pick"""
-	from recorders.device_discovery import forget_autodetected
-	forget_autodetected()
-
-
 class DarkFilter:
 	"""
 	Rejects unlit frames. Flashing IR emitters produce near-black frames
@@ -248,7 +242,6 @@ class Engine:
 			else:
 				backend = self.backend(dims, hint)
 		except CameraError as error:
-			_forget_camera()
 			stats.error = str(error)
 			return VerificationResult.INVALID_DEVICE, stats
 
@@ -283,7 +276,6 @@ class Engine:
 
 				self._apply_exposure(capture)
 		except CameraError as error:
-			_forget_camera()
 			stats.error = str(error)
 			return VerificationResult.INVALID_DEVICE, stats
 		finally:
@@ -328,7 +320,6 @@ class Engine:
 			else:
 				backend = self.backend(enrolled_dims, hint)
 		except CameraError as error:
-			_forget_camera()
 			stats.error = str(error)
 			return VerificationResult.INVALID_DEVICE, [], stats
 
@@ -382,7 +373,6 @@ class Engine:
 
 				self._apply_exposure(capture)
 		except CameraError as error:
-			_forget_camera()
 			stats.error = str(error)
 			return VerificationResult.INVALID_DEVICE, captured, stats
 		finally:
