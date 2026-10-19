@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD polkit Policy Configuration 1.0//EN"
+  "https://specifications.freedesktop.org/PolicyKit/1.0/policyconfig.dtd">
+<policyconfig>
+  <vendor>Linux Hello</vendor>
+  <vendor_url>https://github.com/360900/linux-hello</vendor_url>
+  <icon_name>linux-hello</icon_name>
+
+  <!-- Your own password, so nobody at your unlocked desk can add their face
+       to your account -->
+  <action id="io.github.linuxhello.enroll-self">
+    <description>Manage your own face models</description>
+    <message>Authentication is required to change the faces that can unlock your account</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_self_keep</allow_active>
+    </defaults>
+  </action>
+
+  <action id="io.github.linuxhello.manage-users">
+    <description>Manage face models of other users</description>
+    <message>Authentication is required to manage the face models of other users</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
+
+  <action id="io.github.linuxhello.configure">
+    <description>Configure face authentication</description>
+    <message>Authentication is required to change where and how face authentication is used</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
+</policyconfig>

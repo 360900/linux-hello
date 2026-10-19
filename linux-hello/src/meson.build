@@ -39,6 +39,11 @@ py_sources = [
     'cli/webauthn.py',
     'cli.py',
     'compare.py',
+    'daemon/__init__.py',
+    'daemon/access.py',
+    'daemon/dispatch.py',
+    'daemon/io.github.LinuxHello1.xml',
+    'daemon/manager.py',
     'engine.py',
     'openvino_face.py',
     'i18n.py',
@@ -57,6 +62,7 @@ py_sources = [
     'webauthn/store.py',
     'webauthn/uhid.py',
     'webauthn_daemon.py',
+    'linux_hello_daemon.py',
     'recorders/__init__.py',
     'recorders/errors.py',
     'recorders/ffmpeg_reader.py',
@@ -207,6 +213,66 @@ install_data(
   install_tag: 'bin',
 )
 
+# System service (io.github.LinuxHello1), started on demand over D-Bus
+systemd_unit_dir = get_option('prefix') / 'lib' / 'systemd' / 'system'
+daemon_path = get_option('prefix') / get_option('libexecdir') / 'linux-hello-daemon'
+daemon_bin = configure_file(
+    input: 'bin/linux-hello-cli.in',
+    output: 'linux-hello-daemon',
+    configuration: configuration_data({
+        'script_path': join_paths(pysourcesinstalldir, 'linux_hello_daemon.py'),
+        'python_path': py_full_path,
+    }),
+)
+install_data(
+    daemon_bin,
+    install_mode: 'rwxr-xr-x',
+    install_dir: get_option('libexecdir'),
+    install_tag: 'bin',
+)
+
+daemon_conf = configuration_data({
+    'daemon_path': daemon_path,
+    'mkdir': find_program('mkdir').full_path(),
+    'state_dir': paths_dict.get('state_dir'),
+    'config_dir': paths_dict.get('config_dir'),
+    'log_path': paths_dict.get('log_path'),
+})
+install_data(
+    configure_file(
+        input: 'daemon/io.github.LinuxHello1.service.in',
+        output: 'io.github.LinuxHello1.service',
+        configuration: daemon_conf,
+    ),
+    install_dir: get_option('prefix') / get_option('datadir') / 'dbus-1' / 'system-services',
+    install_tag: 'daemon',
+)
+install_data(
+    configure_file(
+        input: 'daemon/linux-hello-daemon.service.in',
+        output: 'linux-hello-daemon.service',
+        configuration: daemon_conf,
+    ),
+    install_dir: systemd_unit_dir,
+    install_tag: 'daemon',
+)
+install_data(
+    'daemon/io.github.LinuxHello1.conf',
+    install_dir: get_option('prefix') / get_option('datadir') / 'dbus-1' / 'system.d',
+    install_tag: 'daemon',
+)
+install_data(
+    'daemon/io.github.LinuxHello1.xml',
+    install_dir: get_option('prefix') / get_option('datadir') / 'dbus-1' / 'interfaces',
+    install_tag: 'daemon',
+)
+install_data(
+    'daemon/io.github.linuxhello.policy',
+    install_dir: get_option('prefix') / get_option('datadir') / 'polkit-1' / 'actions',
+    install_mode: 'rw-r--r--',
+    install_tag: 'daemon',
+)
+
 # Optional WebAuthn virtual FIDO2 authenticator (based on PR #1125 by qilsklo)
 if get_option('with_webauthn')
     webauthn_conf_data = configuration_data({
@@ -236,13 +302,13 @@ if get_option('with_webauthn')
     )
     install_data(
         webauthn_service,
-        install_dir: get_option('prefix') / get_option('libdir') / 'systemd' / 'system',
+        install_dir: systemd_unit_dir,
         install_tag: 'webauthn',
     )
 
     install_data(
         'webauthn/70-linux-hello-webauthn.rules',
-        install_dir: get_option('prefix') / get_option('libdir') / 'udev' / 'rules.d',
+        install_dir: get_option('prefix') / 'lib' / 'udev' / 'rules.d',
         install_tag: 'webauthn',
     )
 

@@ -1,0 +1,36 @@
+[Unit]
+Description=Linux Hello face authentication service
+Documentation=man:linux-hello-cli(1)
+
+[Service]
+Type=dbus
+BusName=io.github.LinuxHello1
+ExecStart=@daemon_path@
+
+# The service only needs the camera, its own state, the config and the PAM
+# service files it manages. "+" runs the setup outside the sandbox, so the
+# directories exist before ProtectSystem=strict makes their parents read-only.
+ExecStartPre=+@mkdir@ -p -m 0700 @state_dir@
+ExecStartPre=+@mkdir@ -p -m 0755 @config_dir@ @log_path@
+ReadWritePaths=@state_dir@ @config_dir@ @log_path@ /etc/pam.d
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+NoNewPrivileges=yes
+DevicePolicy=closed
+DeviceAllow=char-video4linux rw
+# OpenVINO runs on the iGPU
+DeviceAllow=char-drm rw
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX
+SystemCallArchitectures=native

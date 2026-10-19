@@ -103,11 +103,14 @@ class Engine:
 
 	# -- setup -------------------------------------------------------------
 	def backend(self, enrolled_dims=None, mismatch_hint=""):
-		key = frozenset(enrolled_dims or ())
+		# Long-lived callers (the daemon) swap self.config between requests,
+		# so the detector setting is part of the key
+		use_cnn = self.config.getboolean("core", "use_cnn", fallback=False)
+		key = (use_cnn, frozenset(enrolled_dims or ()))
 		if key not in self._backends:
 			self._backends[key] = self.backend_factory(
-				use_cnn=self.config.getboolean("core", "use_cnn", fallback=False),
-				enrolled_dims=set(key),
+				use_cnn=use_cnn,
+				enrolled_dims=set(key[1]),
 				mismatch_hint=mismatch_hint,
 			)
 		return self._backends[key]

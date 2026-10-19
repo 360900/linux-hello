@@ -1,0 +1,110 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+  Linux Hello system service, object /io/github/LinuxHello1.
+
+  Result codes (Verify, Enroll): 0 success, 10 no face model, 11 timeout,
+  12 aborted, 13 too dark, 14 camera unavailable, 15 rubberstamp failed,
+  250 cancelled.
+
+  Errors: io.github.LinuxHello1.Error.{PermissionDenied, InvalidArgs,
+  NotFound, Failed, Internal}.
+-->
+<node>
+  <interface name="io.github.LinuxHello1.Manager">
+
+    <!-- version s, disabled b, device s, data_files b, user s,
+         user_has_models b, busy b. "user" is the caller. -->
+    <method name="GetStatus">
+      <arg name="status" type="a{sv}" direction="out"/>
+    </method>
+
+    <!-- Root or the user themselves. certainty is the best distance seen
+         times 10 (lower is closer), -1 when no face was seen. -->
+    <method name="Verify">
+      <arg name="user" type="s" direction="in"/>
+      <arg name="result" type="u" direction="out"/>
+      <arg name="certainty" type="d" direction="out"/>
+    </method>
+
+    <!-- Own face: polkit io.github.linuxhello.enroll-self. Other users:
+         io.github.linuxhello.manage-users. An empty label picks one.
+         Progress arrives as EnrollProgress, sent to the caller only. -->
+    <method name="Enroll">
+      <arg name="user" type="s" direction="in"/>
+      <arg name="label" type="s" direction="in"/>
+      <arg name="result" type="u" direction="out"/>
+      <arg name="model_id" type="u" direction="out"/>
+    </method>
+
+    <!-- Cancel the caller's running Verify, Enroll or ListCameras -->
+    <method name="Cancel"/>
+
+    <!-- (id, unix time, label) -->
+    <method name="ListModels">
+      <arg name="user" type="s" direction="in"/>
+      <arg name="models" type="a(uxs)" direction="out"/>
+    </method>
+    <method name="RenameModel">
+      <arg name="user" type="s" direction="in"/>
+      <arg name="id" type="u" direction="in"/>
+      <arg name="label" type="s" direction="in"/>
+    </method>
+    <method name="DeleteModel">
+      <arg name="user" type="s" direction="in"/>
+      <arg name="id" type="u" direction="in"/>
+    </method>
+
+    <!-- Users with at least one model. Admin only. -->
+    <method name="ListUsers">
+      <arg name="users" type="as" direction="out"/>
+    </method>
+
+    <!-- (id, label, description, available, enabled, PAM services) for
+         lock-screen, admin, sudo and login -->
+    <method name="ListTargets">
+      <arg name="targets" type="a(sssbbas)" direction="out"/>
+    </method>
+    <!-- polkit io.github.linuxhello.configure -->
+    <method name="SetTarget">
+      <arg name="id" type="s" direction="in"/>
+      <arg name="enabled" type="b" direction="in"/>
+    </method>
+
+    <!-- Effective values keyed "section.option" -->
+    <method name="GetSettings">
+      <arg name="settings" type="a{ss}" direction="out"/>
+    </method>
+    <!-- polkit io.github.linuxhello.configure -->
+    <method name="SetSetting">
+      <arg name="section" type="s" direction="in"/>
+      <arg name="key" type="s" direction="in"/>
+      <arg name="value" type="s" direction="in"/>
+    </method>
+
+    <!-- Probes every camera, best first: (stable path, device node, name,
+         infrared, mean brightness 0-255).
+         polkit io.github.linuxhello.configure -->
+    <method name="ListCameras">
+      <arg name="cameras" type="a(sssbd)" direction="out"/>
+    </method>
+
+    <!-- (check, state ok|info|warning|error, message) -->
+    <method name="Diagnose">
+      <arg name="checks" type="a(sss)" direction="out"/>
+    </method>
+
+    <!-- state s (searching, no-face, multiple-faces, too-far, too-dark,
+         captured), sample u, samples u, face ad [left, top, right, bottom]
+         as fractions of the frame, darkness d -->
+    <signal name="EnrollProgress">
+      <arg name="user" type="s"/>
+      <arg name="update" type="a{sv}"/>
+    </signal>
+    <signal name="ModelsChanged">
+      <arg name="user" type="s"/>
+    </signal>
+    <signal name="TargetsChanged"/>
+    <signal name="SettingsChanged"/>
+  </interface>
+</node>

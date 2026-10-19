@@ -36,8 +36,16 @@ def migrate_legacy():
 	"""
 	Move <user>.dat files from the old models directory. Only runs as root,
 	never overwrites, and removes the old directory once it is empty.
-	Returns the list of users moved.
+	Best effort: a sandboxed caller with a read-only /var/lib simply leaves
+	the work to the next one. Returns the list of users moved.
 	"""
+	try:
+		return _migrate_legacy()
+	except OSError:
+		return []
+
+
+def _migrate_legacy():
 	legacy = str(getattr(paths, "legacy_models_dir", ""))
 	if not legacy or legacy == models_dir() or not os.path.isdir(legacy) or os.geteuid() != 0:
 		return []

@@ -95,3 +95,17 @@ def test_migration_skipped_without_root(models, fake_paths, monkeypatch):
 		json.dump([{"time": 1, "label": "old", "id": 0, "data": [[0.1]]}], file)
 	assert models.migrate_legacy() == []
 	assert os.path.exists(os.path.join(legacy, "erin.dat"))
+
+
+def test_migration_failure_is_not_fatal(models, fake_paths, monkeypatch):
+	legacy = str(fake_paths.legacy_models_dir)
+	os.makedirs(legacy)
+	with open(os.path.join(legacy, "frank.dat"), "w") as file:
+		json.dump([{"time": 1, "label": "old", "id": 0, "data": [[0.1]]}], file)
+
+	def read_only(*args, **kwargs):
+		raise OSError(30, "Read-only file system")
+
+	monkeypatch.setattr(os, "makedirs", read_only)
+	assert models.load("frank") == []
+	assert os.path.exists(os.path.join(legacy, "frank.dat"))

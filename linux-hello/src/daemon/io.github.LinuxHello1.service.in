@@ -1,0 +1,5 @@
+[D-BUS Service]
+Name=io.github.LinuxHello1
+Exec=@daemon_path@
+User=root
+SystemdService=linux-hello-daemon.service

@@ -116,7 +116,7 @@ endif
 install_data(
     files('src/systemd/polkit-agent-helper@.service.d/10-linux-hello.conf'),
     rename: '10-linux-hello.conf',
-    install_dir: get_option('prefix') / get_option('libdir') / 'systemd' / 'system' / 'polkit-agent-helper@.service.d',
+    install_dir: get_option('prefix') / 'lib' / 'systemd' / 'system' / 'polkit-agent-helper@.service.d',
     install_mode: 'rw-r--r--',
     install_tag: 'config',
 )
