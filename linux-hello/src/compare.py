@@ -34,8 +34,6 @@ if "LINUX_HELLO_BLAS_THREADS" not in os.environ:
 	os.environ["OMP_NUM_THREADS"] = "1"
 	os.environ["GOTO_NUM_THREADS"] = "1"
 
-import atexit
-import subprocess
 from datetime import timezone, datetime
 
 import models as model_store
@@ -45,25 +43,6 @@ import snapshot
 from engine import Engine
 from i18n import _
 from verification import VerificationResult
-
-ui_proc = None
-
-
-def close_ui():
-	if ui_proc is not None:
-		ui_proc.terminate()
-
-
-def send_to_ui(type, message):
-	if ui_proc is None:
-		return
-	try:
-		if ui_proc.poll() is None:
-			ui_proc.stdin.write((type + "=" + message + " \n").encode("utf-8"))
-			ui_proc.stdin.flush()
-	except IOError:
-		pass
-
 
 if len(sys.argv) < 2:
 	sys.exit(VerificationResult.ABORT)
@@ -82,25 +61,8 @@ config = settings.load()
 end_report = config.getboolean("debug", "end_report", fallback=False)
 save_failed = config.getboolean("snapshots", "save_failed", fallback=False)
 save_successful = config.getboolean("snapshots", "save_successful", fallback=False)
-ui_pipe = sys.stdout if config.getboolean("debug", "ui_stdout", fallback=False) else subprocess.DEVNULL
-
-try:
-	ui_proc = subprocess.Popen(["linux-hello", "--start-auth-ui"], stdin=subprocess.PIPE, stdout=ui_pipe, stderr=ui_pipe)
-	atexit.register(close_ui)
-except FileNotFoundError:
-	pass
-
-send_to_ui("M", _("Identifying you..."))
-
 engine = Engine(config)
 snapframes = [] if (save_failed or save_successful) else None
-
-
-def progress(update):
-	text = _("Scanned {} frames").format(update["frames"] - update["dark_frames"])
-	if update["dark_frames"] > 1:
-		text += _(" (skipped {} dark frames)").format(update["dark_frames"])
-	send_to_ui("S", text)
 
 
 def rubberstamps_hook(capture, backend):
@@ -109,9 +71,8 @@ def rubberstamps_hook(capture, backend):
 	import cv2
 	import rubberstamps
 
-	send_to_ui("S", "")
 	# Exits the process with the final status
-	rubberstamps.execute(config, ui_proc, {
+	rubberstamps.execute(config, None, {
 		"video_capture": capture,
 		"face_detector": backend.detector,
 		"pose_predictor": getattr(backend, "pose_predictor", None),
@@ -148,7 +109,6 @@ def print_report(stats):
 try:
 	result, stats = engine.verify(
 		encodings,
-		on_progress=progress,
 		keep_frames=snapframes,
 		after_match=rubberstamps_hook,
 	)
