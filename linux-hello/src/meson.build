@@ -28,6 +28,7 @@ py_paths = configure_file(
 py_sources = [
     'cli/__init__.py',
     'cli/config.py',
+    'cli/emitter.py',
     'cli/snap.py',
     'cli/test.py',
     'cli/webauthn.py',
@@ -39,6 +40,7 @@ py_sources = [
     'daemon/dispatch.py',
     'daemon/io.github.LinuxHello1.xml',
     'daemon/manager.py',
+    'emitter.py',
     'engine.py',
     'openvino_face.py',
     'i18n.py',
@@ -63,6 +65,7 @@ py_sources = [
     'recorders/errors.py',
     'recorders/ffmpeg_reader.py',
     'recorders/pyv4l2_reader.py',
+    'recorders/uvc_xu.py',
     'recorders/v4l2.py',
     'recorders/video_capture.py',
     'recog/__init__.py',
@@ -133,6 +136,7 @@ install_data(
 # Defaults ship read-only with the package; local changes go to
 # /etc/linux-hello/config.ini, which the package never owns
 install_data('config.ini', install_dir: datadir, install_mode: 'rw-r--r--', install_tag: 'config')
+install_data('emitter-devices.json', install_dir: datadir, install_mode: 'rw-r--r--', install_tag: 'config')
 
 install_data('dlib-data/install.sh', 'dlib-data/Readme.md', install_dir: dlibdatadir, install_mode: 'rwxr--r--')
 

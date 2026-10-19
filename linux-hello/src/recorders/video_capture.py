@@ -59,6 +59,13 @@ class VideoCapture:
 		if not os.path.exists(device_path):
 			raise CameraError(_("No camera at {path}. Set 'device_path' to \"none\" to pick one automatically: linux-hello-cli set device_path none").format(path=device_path))
 
+		# Switch the IR emitter on before streaming starts. The session keeps
+		# the camera powered so the setting holds until release().
+		self.emitter = None
+		if self.config.get("video", "ir_emitter", fallback="auto").strip().lower() != "off":
+			import emitter
+			self.emitter = emitter.activate(device_path)
+
 		# Create reader
 		# The internal video recorder
 		self.internal = None
@@ -75,18 +82,21 @@ class VideoCapture:
 		"""
 		Frees resources when destroyed
 		"""
-		if self is not None:
-			try:
-				self.internal.release()
-			except AttributeError as err:
-				pass
+		try:
+			self.release()
+		except AttributeError:
+			pass
 
 	def release(self):
 		"""
-		Release cameras
+		Release cameras and hand the emitter back as it was
 		"""
-		if self is not None:
+		if self.internal is not None:
 			self.internal.release()
+			self.internal = None
+		if getattr(self, "emitter", None) is not None:
+			self.emitter.close()
+			self.emitter = None
 
 	def read_frame(self):
 		"""

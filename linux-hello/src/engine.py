@@ -61,6 +61,47 @@ class DarkFilter:
 		return darkness <= self.threshold
 
 
+class AmbientPairing:
+	"""
+	With an emitter that lights every other frame (face authentication's
+	alternative frame illumination), the unlit frame shows only ambient
+	light. Subtracting it from the next lit frame leaves what the emitter
+	lit, so daylight and lamps stop mattering. Cameras without such an
+	emitter pass straight through.
+	"""
+
+	# Lit frames are clearly brighter than the ambient frame before them
+	RATIO = 1.15
+	MARGIN = 2.0
+	# Give up pairing when no lit frame turns up for this many frames
+	PATIENCE = 10
+
+	def __init__(self, capture):
+		session = getattr(capture, "emitter", None)
+		self.enabled = bool(getattr(session, "alternating", False))
+		self.ambient = None
+		self.unpaired = 0
+
+	def lit(self, frame, gsframe):
+		"""(frame, gsframe) to use, or (None, None) for an ambient frame"""
+		if not self.enabled:
+			return frame, gsframe
+		level = float(gsframe.mean())
+		if self.ambient is not None and level > self.ambient[2] * self.RATIO + self.MARGIN:
+			ambient_frame, ambient_gray, _level = self.ambient
+			self.ambient = None
+			self.unpaired = 0
+			return cv2.subtract(frame, ambient_frame), cv2.subtract(gsframe, ambient_gray)
+
+		self.ambient = (frame, gsframe, level)
+		self.unpaired += 1
+		if self.unpaired > self.PATIENCE:
+			# The emitter does not alternate after all
+			self.enabled = False
+			return frame, gsframe
+		return None, None
+
+
 class Stats:
 	def __init__(self):
 		self.frames = 0
@@ -170,11 +211,18 @@ class Engine:
 		clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
 		rotate = self.config.getint("video", "rotate", fallback=0)
 		scaling = self._scaling(capture)
+		pairing = AmbientPairing(capture)
 
 		while True:
 			stats.frames += 1
 			frame, gsframe = capture.read_frame()
 			stats.height, stats.width = frame.shape[:2]
+			frame, gsframe = pairing.lit(frame, gsframe)
+			if frame is None:
+				# The unlit half of an alternating emitter pair
+				stats.black += 1
+				yield None, None, 100.0
+				continue
 			gsframe = clahe.apply(gsframe)
 			if keep is not None and len(keep) < 3:
 				keep.append(frame)

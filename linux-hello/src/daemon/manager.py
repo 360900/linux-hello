@@ -306,6 +306,18 @@ class Manager:
 		else:
 			add("targets", "warning", "Face unlock is not enabled anywhere yet")
 
+		ir_nodes = _ir_nodes()
+		if ir_nodes:
+			import emitter
+			state = emitter.status(ir_nodes[0])
+			if state.get("method"):
+				add("emitter", "ok", "IR light switched on by {}".format(state["method"]))
+			elif config.get("video", "ir_emitter", fallback="auto").strip().lower() == "off":
+				add("emitter", "info", "IR light control is turned off in the settings")
+			else:
+				add("emitter", "warning", "Linux Hello does not know how to switch on this camera's IR light. "
+					"It may work in daylight only. Find the setting with: sudo linux-hello-cli emitter search")
+
 		modules = _pam_modules()
 		if len(modules) > 1:
 			add("duplicates", "warning", "Several PAM modules installed, remove the stale ones: " + ", ".join(modules))
@@ -337,6 +349,17 @@ def _pam_modules(directories=PAM_MODULE_DIRS):
 		if os.path.isfile(path):
 			found.setdefault(os.path.realpath(path), path)
 	return sorted(found.values())
+
+
+def _ir_nodes():
+	"""IR capture nodes by advertised pixel format, without streaming"""
+	from recorders.device_discovery import IR_FORMATS, candidate_nodes, capture_formats
+	nodes = []
+	for node in candidate_nodes():
+		formats = capture_formats(node)
+		if formats and any(fmt in IR_FORMATS for fmt in formats):
+			nodes.append(node)
+	return nodes
 
 
 def _camera_name(node):

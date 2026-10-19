@@ -46,7 +46,7 @@ HINTS = {
 	"captured": _("Got it, hold still"),
 }
 
-LOCAL_COMMANDS = ("config", "snapshot", "test", "webauthn", "reset-system")
+LOCAL_COMMANDS = ("config", "snapshot", "test", "webauthn", "reset-system", "emitter")
 
 
 def invoking_user():
@@ -94,6 +94,8 @@ def build_parser():
   test                     live camera preview (root)
   snapshot                 save a camera snapshot (root)
   config                   edit local settings (root)
+  emitter status|test      how the IR light is switched on, and whether it works (root)
+  emitter search           find the IR light setting of an unsupported camera (root)
   reset-system [--purge]   undo all PAM changes; --purge also deletes models and settings (root)
   webauthn ...             passkey authenticator (root)
   version
@@ -346,6 +348,9 @@ def run_local(args):
 		fail(_("Please run this command as root:\n\n\tsudo linux-hello-cli {}").format(" ".join(sys.argv[1:])))
 	if args.command == "reset-system":
 		return cmd_reset_system(args)
+	if args.command == "emitter":
+		import cli.emitter
+		sys.exit(cli.emitter.run(args))
 
 	# The older commands read their options from builtins
 	builtins.linux_hello_args = args

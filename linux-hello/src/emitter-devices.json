@@ -1,0 +1,4 @@
+{
+  "about": "Vendor controls that switch the IR emitter on, per camera model. Keys are 'vendor:product/video control interface'. Cameras with the Microsoft face authentication control need no entry. Add entries from 'linux-hello-cli emitter export'.",
+  "devices": {}
+}
