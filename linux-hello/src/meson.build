@@ -135,6 +135,16 @@ install_data('config.ini', install_dir: datadir, install_mode: 'rw-r--r--', inst
 
 install_data('dlib-data/install.sh', 'dlib-data/Readme.md', install_dir: dlibdatadir, install_mode: 'rwxr--r--')
 
+# Ship the face recognition data with the package instead of downloading
+# it after install
+if get_option('dlib_data_files') != ''
+    dlib_files = []
+    foreach name : ['dlib_face_recognition_resnet_model_v1.dat', 'mmod_human_face_detector.dat', 'shape_predictor_5_face_landmarks.dat']
+        dlib_files += get_option('dlib_data_files') / name
+    endforeach
+    install_data(dlib_files, install_dir: dlibdatadir, install_mode: 'rw-r--r--', install_tag: 'dlib_data')
+endif
+
 install_data(
     'openvino-models/install.sh',
     install_dir: datadir / 'openvino-models',

@@ -79,7 +79,7 @@ echo ">> CPython tarball hash verified"
 # 2. Wheels: download + verify sha256 from the manifest, then install
 # ---------------------------------------------------------------------------
 WHEELS=()
-for PKG in numpy opencv-python-headless shiboken6 PySide6-Essentials PySide6 cffi pycparser cryptography fido2; do
+for PKG in numpy opencv-python-headless shiboken6 PySide6-Essentials PySide6 cffi pycparser cryptography fido2 dbus-fast; do
     read -r FILENAME URL EXPECTED <<EOF
 $(python3 - "$PKG" "$ARCH" "$MANIFEST" <<'PYEOF'
 import json, sys
@@ -221,6 +221,8 @@ import cryptography
 print("cryptography", cryptography.__version__)
 import fido2.ctap2
 print("fido2 ok")
+import dbus_fast.aio
+print("dbus-fast ok")
 from PySide6 import QtWidgets, QtGui, QtCore
 print("PySide6", QtCore.__version__)
 EOF

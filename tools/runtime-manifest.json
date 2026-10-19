@@ -133,6 +133,27 @@
         "sha256": "7cb2a09467de032332c743bc967007f016598c66c9c9ebc54a5b66d3d9e46d54",
         "filename": "dlib-20.0.1.tar.gz"
       }
+    },
+    "dbus-fast": {
+      "version": "5.2.0",
+      "x86_64": {
+        "url": "https://files.pythonhosted.org/packages/ac/d8/528ce993791bc06fb5bc8b8abef87f49240945302e858a1d6894073e7c54/dbus_fast-5.2.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+        "sha256": "236327794a5957238e83c363809903b6a47d1f4fecd64831a29fd09458d90f0e",
+        "filename": "dbus_fast-5.2.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl"
+      },
+      "aarch64": {
+        "url": "https://files.pythonhosted.org/packages/d2/81/3c3ab1c728e2493e6c01c2e652ed42a60821cc190c4a596d2405d3374812/dbus_fast-5.2.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl",
+        "sha256": "e5a0742c9c2bdae7599d1fff06a609cc7cf19d4a84bf7e6e2cea1d086d1ecc0b",
+        "filename": "dbus_fast-5.2.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl"
+      }
+    }
+  },
+  "dlib_data": {
+    "url": "https://github.com/davisking/dlib-models/raw/master/",
+    "files": {
+      "dlib_face_recognition_resnet_model_v1.dat.bz2": "abb1f61041e434465855ce81c2bd546e830d28bcbed8d27ffbe5bb408b11553a",
+      "mmod_human_face_detector.dat.bz2": "db9e9e40f092c118d5eb3e643935b216838170793559515541c56a2b50d9fc84",
+      "shape_predictor_5_face_landmarks.dat.bz2": "6e787bbebf5c9efdb793f6cd1f023230c4413306605f24f299f12869f95aa472"
     }
   }
 }
