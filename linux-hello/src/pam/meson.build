@@ -2,6 +2,7 @@ inih_cpp = dependency('INIReader', fallback: ['inih', 'INIReader_dep'])
 libevdev = dependency('libevdev')
 libpam = meson.get_compiler('cpp').find_library('pam')
 threads = dependency('threads')
+libsystemd = dependency('libsystemd')
 
 # Translations
 subdir('po')
@@ -18,12 +19,14 @@ pamdir = get_option('pam_dir') != '' ? get_option('pam_dir') : join_paths(get_op
 shared_library(
 	'pam_linux_hello',
 	'main.cc',
+	'daemon_client.cc',
 	'enter_device.cc',
 	dependencies: [
 		libpam,
 		inih_cpp,
 		threads,
 		libevdev,
+		libsystemd,
 	],
 	link_depends: [
 		paths_h,

@@ -13,7 +13,8 @@ import os
 import signal
 import sys
 
-# Same livelock protection as compare.py, see there
+# Force single threaded BLAS: dlib's OpenBLAS/OpenMP matrix code can livelock
+# when raced against other threads. Set LINUX_HELLO_BLAS_THREADS to opt out.
 if "LINUX_HELLO_BLAS_THREADS" not in os.environ:
 	os.environ["OPENBLAS_NUM_THREADS"] = "1"
 	os.environ["OMP_NUM_THREADS"] = "1"

@@ -1,6 +1,6 @@
 # Recognition backend factory
 # Based on PR #1088 by haleelrah (https://github.com/boltgolt/howdy/pull/1088)
-# Centralizes the backend choice shared by compare.py, cli/add.py and
+# Centralizes the backend choice shared by the engine and
 # cli/test.py: prefer the OpenVINO GPU pipeline when models are present and
 # compatible with the enrolled encodings, otherwise fall back to dlib.
 

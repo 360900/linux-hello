@@ -1,7 +1,7 @@
 # Recognition backend abstraction
 # Based on PR #1088 by haleelrah (https://github.com/boltgolt/howdy/pull/1088)
 # Abstracts the face detection / landmark / encoding pipeline behind one
-# interface so compare.py, add.py and test.py stay backend agnostic.
+# interface so the engine and cli/test.py stay backend agnostic.
 
 
 class FaceRectangle:

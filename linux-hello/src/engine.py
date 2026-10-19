@@ -1,4 +1,4 @@
-# Face capture and matching, shared by the daemon, compare.py and the CLI.
+# Face capture and matching, shared by the daemon and the CLI.
 #
 # The engine owns the frame loop: dark frame rejection, scaling, rotation,
 # detection, encoding and matching. Callers pass encodings in and get a

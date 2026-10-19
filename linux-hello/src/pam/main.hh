@@ -9,14 +9,15 @@
 enum class ConfirmationType : std::uint8_t { Unset, LinuxHello, Pam };
 enum class Workaround : std::uint8_t { Off, Input, Native };
 
-// Exit status codes returned by the compare process
+// Result codes of the Linux Hello service's Verify method
 enum CompareError : std::uint8_t {
   NO_FACE_MODEL = 10,
   TIMEOUT_REACHED = 11,
   ABORT = 12,
   TOO_DARK = 13,
   INVALID_DEVICE = 14,
-  RUBBERSTAMP = 15
+  RUBBERSTAMP = 15,
+  CANCELLED = 250
 };
 
 inline auto get_workaround(const std::string &workaround) -> Workaround {

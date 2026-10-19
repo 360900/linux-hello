@@ -23,9 +23,9 @@ guide: how to install, configure, use, and reason about the feature.
 
 ```
 Browser  ──USB/HID──▶  Linux Hello virtual FIDO2 device  ──▶  face verification  ──▶  passkey signs the challenge
-(unmodified)          (/dev/uhid, looks like a           (compare.py, the
-                       plugged-in security key)           exact same check
-                                                          PAM uses)
+(unmodified)          (/dev/uhid, looks like a           (the Linux Hello
+                       plugged-in security key)           service, the same
+                                                          check PAM uses)
 ```
 
 A small root daemon (`linux-hello-webauthn`) creates a **virtual FIDO2 HID
@@ -33,7 +33,7 @@ device** using the kernel's `uhid` interface. To Firefox and Chromium it
 looks exactly like a plugged-in security key, so **no browser extension,
 patch, or native-messaging host is required**. When a website asks for a
 passkey, the browser talks CTAP2 to the virtual device; the daemon verifies
-your face with the same `compare.py` path the PAM module uses, and only then
+your face through the Linux Hello service, like the PAM module does, and only then
 signs the challenge.
 
 Because it presents as a roaming/USB authenticator rather than an internal
@@ -254,8 +254,8 @@ convenience. It is classified as **convenience-grade**, not high-assurance.
 
 ### Face verification is mandatory per operation
 
-Every `make_credential` and `get_assertion` calls the **same `compare.py`**
-face check the PAM module uses, **immediately before** the key is used. There
+Every `make_credential` and `get_assertion` runs the **same face check**
+the PAM module uses (the service's Verify method), **immediately before** the key is used. There
 is no caching or "remember me" window: no face match, no signature.
 
 ### What we never log
@@ -324,7 +324,7 @@ Module layout under `linux-hello/src/`:
 
 | File | Responsibility |
 |------|----------------|
-| `verification.py` | Internal face-verification API (`verify_face`, `FaceVerifier`, `BoundVerifier`) wrapping `compare.py`. Introduced by the Phase 1 refactor; PAM is untouched. |
+| `verification.py` | Internal face-verification API (`verify_face`, `FaceVerifier`, `BoundVerifier`), a client of the Linux Hello service's Verify method. |
 | `webauthn/authenticator.py` | CTAP2 authenticator core: `make_credential`, `get_assertion`, `get_info`, etc. Calls the verifier before every key use. |
 | `webauthn/store.py` | `CredentialStore`: credential metadata, RP scoping, sign-counter persistence, atomic + locked writes. |
 | `webauthn/keystore.py` | `SoftwareKeyStore`: AES-256-GCM encrypted P-256 keys (development-grade). |

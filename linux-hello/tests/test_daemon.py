@@ -64,9 +64,11 @@ class FakeEngine:
 		self.config = None
 		self.verify_calls = []
 
-	def verify(self, encodings, cancelled=None):
+	def verify(self, encodings, cancelled=None, keep_frames=None, after_match=None):
 		from verification import VerificationResult
 		self.verify_calls.append(encodings)
+		if after_match is not None and after_match(None, None) is False:
+			return VerificationResult.RUBBERSTAMP, FakeStats()
 		return VerificationResult.SUCCESS, FakeStats(0.21)
 
 	def enroll(self, samples, timeout, on_progress, cancelled, enrolled_dims):
@@ -342,3 +344,22 @@ def test_duplicate_pam_modules_are_found(env, tmp_path):
 	assert _pam_modules(directories) == [str(usr / "pam_linux_hello.so")]
 	(local / "pam_linux_hello.so").write_bytes(b"old")
 	assert len(_pam_modules(directories)) == 2
+
+
+def test_rubberstamps_outcome(env, monkeypatch):
+	import configparser
+	import sys
+	import types
+	from daemon.manager import _rubberstamps
+
+	config = configparser.ConfigParser()
+	config.read_dict({"rubberstamps": {"enabled": "false"}})
+	assert _rubberstamps(config, None, None) is True
+
+	config.set("rubberstamps", "enabled", "true")
+	backend = types.SimpleNamespace(detector=None)
+	for code, accepted in ((0, True), (15, False)):
+		def execute(config, ui, opencv, code=code):
+			sys.exit(code)
+		monkeypatch.setitem(sys.modules, "rubberstamps", types.SimpleNamespace(execute=execute))
+		assert _rubberstamps(config, None, backend) is accepted

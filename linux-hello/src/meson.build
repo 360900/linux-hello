@@ -34,7 +34,6 @@ py_sources = [
     'cli/webauthn.py',
     'cli.py',
     'client.py',
-    'compare.py',
     'daemon/__init__.py',
     'daemon/access.py',
     'daemon/dispatch.py',
@@ -87,7 +86,6 @@ else
 endif
 
 pam_module_conf_data = configuration_data(paths_dict)
-pam_module_conf_data.set('compare_script_path', join_paths(pysourcesinstalldir, 'compare.py'))
 pam_module_conf_data.set('config_file_path', config_path)
 pam_module_conf_data.set('vendor_config_path', vendorconfigpath)
 subdir('pam')

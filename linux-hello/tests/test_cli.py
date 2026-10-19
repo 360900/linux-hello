@@ -227,3 +227,21 @@ def test_cli_copies_dedupes_symlinks(tmp_path, monkeypatch):
 	assert cli.cli_copies() == [str(usr_bin / "linux-hello-cli")]
 	monkeypatch.setenv("PATH", os.pathsep.join([str(local_bin), str(usr_bin), str(tmp_path / "bin")]))
 	assert cli.cli_copies() == [str(local_bin / "linux-hello-cli"), str(usr_bin / "linux-hello-cli")]
+
+
+def test_webauthn_verifier_uses_the_service(service):
+	import models as model_store
+	from verification import FaceVerifier, VerificationResult
+
+	cli, _allowed, _root = service
+	verifier = FaceVerifier(bus_address=cli.private_bus)
+	assert verifier.verify(ME, timeout=20) == VerificationResult.NO_FACE_MODEL
+	model_store.add(ME, "office", [[0.5, 0.5]], 1)
+	assert verifier.verify(ME, timeout=20) == VerificationResult.SUCCESS
+	assert verifier.verify("root") == VerificationResult.ABORT
+
+
+def test_webauthn_verifier_without_service(private_bus):  # noqa: F811
+	from verification import FaceVerifier, VerificationResult
+
+	assert FaceVerifier(bus_address=private_bus).verify(ME, timeout=20) == VerificationResult.UNKNOWN_ERROR

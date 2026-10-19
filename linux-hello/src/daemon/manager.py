@@ -112,7 +112,20 @@ class Manager:
 			return [int(VerificationResult.NO_FACE_MODEL), -1.0]
 
 		def work(cancel):
-			return self.engine.verify(encodings, cancelled=cancel.is_set)
+			config = self.engine.config
+			save_failed = config.getboolean("snapshots", "save_failed", fallback=False)
+			save_successful = config.getboolean("snapshots", "save_successful", fallback=False)
+			frames = [] if (save_failed or save_successful) else None
+			result, stats = self.engine.verify(
+				encodings,
+				cancelled=cancel.is_set,
+				keep_frames=frames,
+				after_match=lambda capture, backend: _rubberstamps(config, capture, backend),
+			)
+			if (result == VerificationResult.SUCCESS and save_successful) or (
+					result in (VerificationResult.TIMEOUT_REACHED, VerificationResult.TOO_DARK) and save_failed):
+				_snapshot(frames, "SUCCESSFUL" if result == VerificationResult.SUCCESS else "FAILED", stats)
+			return result, stats
 
 		result, stats = await self._camera(caller, work)
 		certainty = stats.as_dict()["best_certainty"]
@@ -325,6 +338,48 @@ class Manager:
 		if _selinux_enforcing():
 			add("selinux", "info", "SELinux is enforcing; if the camera fails, check the audit log")
 		return [checks]
+
+
+def _rubberstamps(config, capture, backend):
+	"""Extra checks after a match, such as a nod. True to accept the match."""
+	if not config.getboolean("rubberstamps", "enabled", fallback=False):
+		return True
+	import cv2
+	import rubberstamps
+
+	try:
+		rubberstamps.execute(config, None, {
+			"video_capture": capture,
+			"face_detector": backend.detector,
+			"pose_predictor": getattr(backend, "pose_predictor", None),
+			"clahe": cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)),
+		})
+	except SystemExit as outcome:
+		# execute() ends with sys.exit(0) when every stamp passed
+		return outcome.code in (0, None)
+	return True
+
+
+def _snapshot(frames, kind, stats):
+	"""Save a picture of the attempt to the snapshots directory"""
+	from datetime import datetime, timezone
+
+	import snapshot
+
+	if not frames:
+		return
+	summary = stats.as_dict()
+	try:
+		snapshot.generate(frames, [
+			kind + " LOGIN",
+			"Date: " + datetime.now(timezone.utc).strftime("%Y/%m/%d %H:%M:%S UTC"),
+			"Scan time: " + str(summary["seconds"]) + "s",
+			"Frames: " + str(stats.frames) + " (" + str(summary["fps"]) + "FPS)",
+			"Hostname: " + os.uname().nodename,
+			"Best certainty value: " + str(summary["best_certainty"]),
+		])
+	except OSError as error:
+		log.warning("Could not save a snapshot: %s", error)
 
 
 def _dlib_data_present():

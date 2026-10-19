@@ -1,17 +1,15 @@
 # Internal face verification API
 # Based on PR #1125 by qilsklo (https://github.com/boltgolt/howdy/pull/1125)
-# Wraps the compare.py subprocess contract also used by the PAM module,
-# so callers get behaviour identical to PAM authentication
+# Asks the Linux Hello service (io.github.LinuxHello1) to verify a face,
+# the same way the PAM module does, so callers get identical behaviour.
 
+import asyncio
 import enum
-import os
-import subprocess
-import sys
 import threading
 
 
 class VerificationResult(enum.IntEnum):
-	"""Exit status codes of the compare process, mirrors CompareError in pam/main.hh"""
+	"""Result codes of the service's Verify method, mirrors CompareError in pam/main.hh"""
 	SUCCESS = 0
 	NO_FACE_MODEL = 10
 	TIMEOUT_REACHED = 11
@@ -19,13 +17,13 @@ class VerificationResult(enum.IntEnum):
 	TOO_DARK = 13
 	INVALID_DEVICE = 14
 	RUBBERSTAMP = 15
-	# Not produced by compare.py itself: the caller cancelled or hard-killed it
 	CANCELLED = 250
+	# Not produced by the service: it could not be asked or did not answer
 	UNKNOWN_ERROR = 251
 
 	@classmethod
 	def from_exit_code(cls, code):
-		"""Map a compare.py exit status to a VerificationResult"""
+		"""Map a result code to a VerificationResult"""
 		try:
 			return cls(code)
 		except ValueError:
@@ -33,83 +31,107 @@ class VerificationResult(enum.IntEnum):
 
 
 class FaceVerifier:
-	"""Runs Linux Hello face verification for a user by spawning the compare script
+	"""Runs Linux Hello face verification for a user through the service
 
-	The compare script only communicates through its exit code, which keeps
-	this wrapper equivalent to the PAM module and free of side effects on it.
 	A verifier instance runs at most one verification at a time and can be
 	cancelled from another thread (used by the CTAPHID CANCEL command).
+	Cancelling drops the bus connection, which makes the service stop
+	scanning and release the camera.
 	"""
 
-	def __init__(self, compare_script=None, python_executable=None):
-		self.compare_script = compare_script or os.path.join(os.path.dirname(os.path.abspath(__file__)), "compare.py")
-		self.python_executable = python_executable or sys.executable
-		self._process = None
+	BUS_NAME = "io.github.LinuxHello1"
+	OBJECT_PATH = "/io/github/LinuxHello1"
+	INTERFACE = "io.github.LinuxHello1.Manager"
+
+	def __init__(self, bus_address=None):
+		self.bus_address = bus_address
 		self._lock = threading.Lock()
-		self._cancelled = False
+		self._running = None
 
 	def verify(self, user, timeout=None):
 		"""Verify the face of the given user, blocking until a result is known
 
-		timeout is a hard kill deadline in seconds on top of the internal
-		timeout compare.py already applies from [video] timeout in the config.
+		timeout is a hard deadline in seconds on top of the scan timeout the
+		service applies from [video] timeout in the config.
 		"""
 		if not user or user == "root":
 			return VerificationResult.ABORT
 
 		with self._lock:
-			if self._process is not None:
-				# A verification is already running on this instance
+			if self._running is not None:
 				return VerificationResult.ABORT
-			self._cancelled = False
-			try:
-				self._process = subprocess.Popen(
-					[self.python_executable, self.compare_script, user],
-					stdout=subprocess.DEVNULL,
-					stderr=subprocess.DEVNULL)
-			except OSError:
-				self._process = None
-				return VerificationResult.UNKNOWN_ERROR
-			process = self._process
+			loop = asyncio.new_event_loop()
+			self._running = {"loop": loop, "bus": None, "cancelled": False}
+			state = self._running
 
 		try:
-			exit_code = process.wait(timeout=timeout)
-		except subprocess.TimeoutExpired:
-			process.terminate()
-			try:
-				process.wait(timeout=2)
-			except subprocess.TimeoutExpired:
-				process.kill()
-				process.wait()
-			exit_code = VerificationResult.TIMEOUT_REACHED
+			return loop.run_until_complete(self._verify(user, timeout, state))
 		finally:
+			loop.close()
 			with self._lock:
-				self._process = None
-				cancelled = self._cancelled
+				self._running = None
 
-		if cancelled:
+	async def _verify(self, user, timeout, state):
+		from dbus_fast import BusType, Message, MessageType
+		from dbus_fast.aio import MessageBus
+
+		try:
+			if self.bus_address:
+				bus = await MessageBus(bus_address=self.bus_address).connect()
+			else:
+				bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+		except (OSError, ValueError):
+			return VerificationResult.UNKNOWN_ERROR
+		state["bus"] = bus
+		if state["cancelled"]:
+			bus.disconnect()
 			return VerificationResult.CANCELLED
 
-		# A negative return code means the process died from a signal
-		if exit_code < 0:
-			return VerificationResult.ABORT
+		try:
+			reply = await asyncio.wait_for(bus.call(Message(
+				destination=self.BUS_NAME,
+				path=self.OBJECT_PATH,
+				interface=self.INTERFACE,
+				member="Verify",
+				signature="s",
+				body=[user],
+			)), timeout)
+		except asyncio.TimeoutError:
+			return VerificationResult.TIMEOUT_REACHED
+		except Exception:  # noqa: BLE001 - the connection was dropped by cancel()
+			return VerificationResult.CANCELLED if state["cancelled"] else VerificationResult.UNKNOWN_ERROR
+		finally:
+			bus.disconnect()
 
-		return VerificationResult.from_exit_code(exit_code)
+		if state["cancelled"]:
+			return VerificationResult.CANCELLED
+		if reply.message_type == MessageType.ERROR:
+			return VerificationResult.UNKNOWN_ERROR
+		return VerificationResult.from_exit_code(reply.body[0])
 
 	def cancel(self):
 		"""Abort a running verification from another thread"""
 		with self._lock:
-			self._cancelled = True
-			if self._process is not None:
-				self._process.terminate()
+			state = self._running
+			if state is None:
+				return
+			state["cancelled"] = True
+			bus = state["bus"]
+			loop = state["loop"]
+		if bus is not None:
+			try:
+				loop.call_soon_threadsafe(bus.disconnect)
+			except RuntimeError:
+				# The verification ended in the meantime
+				pass
 
 
 class BoundVerifier:
 	"""A FaceVerifier fixed to one user, the interface the authenticator expects"""
 
-	def __init__(self, user, compare_script=None):
+	def __init__(self, user, bus_address=None):
 		self.user = user
-		self._verifier = FaceVerifier(compare_script=compare_script)
+		self._verifier = FaceVerifier(bus_address=bus_address)
 
 	def verify(self, timeout=None):
 		return self._verifier.verify(self.user, timeout=timeout)

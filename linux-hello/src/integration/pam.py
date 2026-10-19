@@ -29,7 +29,7 @@ INSERT_LINE = "auth\t[success=done default=ignore]\t" + MODULE
 
 # In a non-interactive stack nothing else may grant access: anything but a
 # match (including PAM_IGNORE) fails the stack
-OWN_STACK_LINE = "auth\t[success=ok default=die]\t" + MODULE
+OWN_STACK_LINE = "auth\t[success=ok default=die]\t" + MODULE + " no_password"
 
 # First lines of every service file we create. Such a file is only ever
 # deleted as a whole: stripping our module out of it would leave a stack

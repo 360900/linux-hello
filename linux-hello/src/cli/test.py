@@ -22,7 +22,7 @@ video_capture = VideoCapture(config)
 
 video_certainty = config.getfloat("video", "certainty", fallback=3.5) / 10
 exposure = config.getint("video", "exposure", fallback=-1)
-# Same adaptive "auto" mode as compare.py: learn the scene baseline
+# Same adaptive "auto" mode as the engine: learn the scene baseline
 dark_threshold_raw = str(config.get("video", "dark_threshold", fallback="60")).strip().lower()
 dark_threshold_auto = dark_threshold_raw in ("auto", "none")
 if not dark_threshold_auto:

@@ -1,17 +1,13 @@
 #include <cerrno>
-#include <csignal>
 #include <cstdlib>
 
 #include <glob.h>
 #include <libintl.h>
 #include <pthread.h>
-#include <spawn.h>
 #include <stdexcept>
-#include <sys/signalfd.h>
 #include <sys/stat.h>
 #include <sys/syslog.h>
 #include <sys/types.h>
-#include <sys/wait.h>
 #include <syslog.h>
 #include <unistd.h>
 
@@ -31,6 +27,7 @@
 #include <security/pam_ext.h>
 #include <security/pam_modules.h>
 
+#include "daemon_client.hh"
 #include "enter_device.hh"
 #include "main.hh"
 #include "optional_task.hh"
@@ -49,54 +46,45 @@ struct SyslogGuard {
 #define S(msg) gettext(msg)
 
 /**
- * Inspect the status code returned by the compare process
- * @param  status        The status code
+ * Report a failed verification
+ * @param  result        The result code of the Linux Hello service
  * @param  conv_function The PAM conversation function
  * @return               A PAM return code
  */
-auto linux_hello_error(int status,
+auto linux_hello_error(unsigned result,
                  const std::function<int(int, const char *)> &conv_function)
     -> int {
-  // If the process has exited
-  if (WIFEXITED(status)) {
-    // Get the status code returned
-    status = WEXITSTATUS(status);
-
-    switch (status) {
-    case CompareError::NO_FACE_MODEL:
-      syslog(LOG_NOTICE, "Failure, no face model known");
-      break;
-    case CompareError::TIMEOUT_REACHED:
-      conv_function(PAM_ERROR_MSG, S("Failure, timeout reached"));
-      syslog(LOG_ERR, "Failure, timeout reached");
-      break;
-    case CompareError::ABORT:
-      syslog(LOG_ERR, "Failure, general abort");
-      break;
-    case CompareError::TOO_DARK:
-      conv_function(PAM_ERROR_MSG, S("Face detection image too dark"));
-      syslog(LOG_ERR, "Failure, image too dark");
-      break;
-    case CompareError::INVALID_DEVICE:
-      syslog(LOG_ERR,
-             "Failure, not possible to open camera at configured path");
-      break;
-    default:
-      conv_function(PAM_ERROR_MSG,
-                    (std::string(S("Unknown error: ")) + std::to_string(status))
-                        .c_str());
-      syslog(LOG_ERR, "Failure, unknown error %d", status);
-    }
-  } else if (WIFSIGNALED(status)) {
-    // We get the signal
-    status = WTERMSIG(status);
-
-    syslog(LOG_ERR, "Child killed by signal %s (%d)", strsignal(status),
-           status);
+  switch (result) {
+  case CompareError::NO_FACE_MODEL:
+    syslog(LOG_NOTICE, "Failure, no face model known");
+    return PAM_AUTHINFO_UNAVAIL;
+  case CompareError::TIMEOUT_REACHED:
+    conv_function(PAM_ERROR_MSG, S("Failure, timeout reached"));
+    syslog(LOG_ERR, "Failure, timeout reached");
+    break;
+  case CompareError::ABORT:
+    syslog(LOG_ERR, "Failure, general abort");
+    break;
+  case CompareError::TOO_DARK:
+    conv_function(PAM_ERROR_MSG, S("Face detection image too dark"));
+    syslog(LOG_ERR, "Failure, image too dark");
+    break;
+  case CompareError::INVALID_DEVICE:
+    syslog(LOG_ERR, "Failure, the camera could not be opened");
+    return PAM_AUTHINFO_UNAVAIL;
+  case CompareError::RUBBERSTAMP:
+    syslog(LOG_ERR, "Failure, a rubberstamp check failed");
+    break;
+  case CompareError::CANCELLED:
+    syslog(LOG_INFO, "Face authentication cancelled");
+    break;
+  default:
+    conv_function(PAM_ERROR_MSG,
+                  (std::string(S("Unknown error: ")) + std::to_string(result))
+                      .c_str());
+    syslog(LOG_ERR, "Failure, unknown error %u", result);
   }
 
-  // As this function is only called for error status codes, signal an error to
-  // PAM
   return PAM_AUTH_ERR;
 }
 
@@ -109,11 +97,11 @@ auto linux_hello_error(int status,
  * @param  conv_function PAM conversation function
  * @return          Returns the conversation function return code
  */
-auto linux_hello_status(char *username, int status, const LayeredConfig &config,
+auto linux_hello_status(char *username, unsigned result, const LayeredConfig &config,
                   const std::function<int(int, const char *)> &conv_function)
     -> int {
-  if (status != EXIT_SUCCESS) {
-    return linux_hello_error(status, conv_function);
+  if (result != 0) {
+    return linux_hello_error(result, conv_function);
   }
 
   if (!config.GetBoolean("core", "no_confirmation", true)) {
@@ -183,10 +171,12 @@ auto check_enabled(const LayeredConfig &config, const char *username) -> int {
     globfree(&glob_result);
   }
 
-  // pre-check if this user has face model file
+  // Skip users without a face model without starting the service. Only
+  // conclusive as root: other callers, like the lock screen running as the
+  // user, cannot look into the models directory and ask the service.
   auto model_path = std::string(USER_MODELS_DIR) + "/" + username + ".dat";
   struct stat stat_;
-  if (stat(model_path.c_str(), &stat_) != 0) {
+  if (stat(model_path.c_str(), &stat_) != 0 && errno == ENOENT) {
     return PAM_AUTHINFO_UNAVAIL;
   }
 
@@ -207,15 +197,13 @@ auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
   openlog("pam_linux_hello", 0, LOG_AUTHPRIV);
   SyslogGuard syslog_guard;
 
-  // Verify the compare script exists and is accessible before proceeding.
-  // This catches broken installs and SELinux denials early with a clear
-  // message instead of a cryptic spawn failure.
-  if (access(COMPARE_PROCESS_PATH, R_OK) != 0) {
-    syslog(LOG_ERR,
-           "Compare script not accessible: %s (%s). SELinux may be denying "
-           "access, check the audit log and see the Linux Hello SELinux notes",
-           COMPARE_PROCESS_PATH, strerror(errno));
-    return PAM_AUTHINFO_UNAVAIL;
+  // "no_password": never prompt for a password in parallel, for stacks
+  // without one such as the lock screen's non-interactive kde-face
+  bool no_password = false;
+  for (int i = 0; i < argc; i++) {
+    if (std::string(argv[i]) == "no_password") {
+      no_password = true;
+    }
   }
 
   LayeredConfig config(VENDOR_CONFIG_FILE_PATH, CONFIG_FILE_PATH);
@@ -282,19 +270,14 @@ auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
     }
   }
 
-  const char *const args[] = {PYTHON_EXECUTABLE_PATH, // NOLINT
-                              COMPARE_PROCESS_PATH, username, nullptr};
-  pid_t child_pid;
-
-  // Start the python subprocess
-  // NOTE: We pass `environ` so compare.py inherits PATH, LANG, HOME, etc.
-  // Passing nullptr would strip all env vars, causing silent failures.
-  if (posix_spawnp(&child_pid, PYTHON_EXECUTABLE_PATH, nullptr, nullptr,
-                   const_cast<char *const *>(args), environ) != 0) {
-    syslog(LOG_ERR, "Can't spawn the Linux Hello process: %s (%d)", strerror(errno),
-           errno);
-    return PAM_SYSTEM_ERR;
+  // The service gets the scan timeout plus time for a cold start (loading
+  // the recognition models) and for opening the camera
+  double scan_timeout = 4;
+  try {
+    scan_timeout = std::stod(config.GetString("video", "timeout", "4"));
+  } catch (const std::exception &) {
   }
+  VerifyRequest request(username, static_cast<unsigned>(scan_timeout) + 30);
 
   // NOTE: We should replace mutex and condition_variable by atomic wait, but
   // it's too recent (C++20)
@@ -302,11 +285,9 @@ auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
   std::condition_variable convar;
   ConfirmationType confirmation_type(ConfirmationType::Unset);
 
-  // This task wait for the status of the python subprocess (we don't want a
-  // zombie process)
-  optional_task<int> child_task([&] {
-    int status;
-    waitpid(child_pid, &status, 0);
+  // This task waits for the service's answer
+  optional_task<VerifyRequest::Status> verify_task([&] {
+    auto status = request.run();
     {
       std::unique_lock<std::mutex> lock(mutx);
       if (confirmation_type == ConfirmationType::Unset) {
@@ -317,7 +298,7 @@ auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
 
     return status;
   });
-  child_task.activate();
+  verify_task.activate();
 
   // This task waits for the password input (if the workaround wants it)
   optional_task<std::tuple<int, char *>> pass_task([&] {
@@ -335,7 +316,7 @@ auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
     return std::tuple<int, char *>(pam_res, auth_tok_ptr);
   });
 
-  auto ask_pass = ask_auth_tok && workaround != Workaround::Off;
+  auto ask_pass = ask_auth_tok && !no_password && workaround != Workaround::Off;
 
   // We ask for the password if the function requires it and if a workaround is
   // set
@@ -343,7 +324,7 @@ auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
     pass_task.activate();
   }
 
-  // Wait for the end either of the child or the password input
+  // Wait for the end either of the verification or the password input
   {
     std::unique_lock<std::mutex> lock(mutx);
     convar.wait(lock,
@@ -352,9 +333,9 @@ auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
 
   // The password has been entered or an error has occurred
   if (confirmation_type == ConfirmationType::Pam) {
-    // We kill the child because we don't need its result
-    kill(child_pid, SIGTERM);
-    child_task.stop(false);
+    // The service stops scanning once our connection is gone
+    request.cancel();
+    verify_task.stop(false);
 
     // We just wait for the thread to stop since it's this one which sent us the
     // confirmation type
@@ -371,24 +352,34 @@ auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
     return PAM_IGNORE;
   }
 
-  // The compare process has finished its execution
-  child_task.stop(false);
+  // The service has answered, or could not be reached
+  verify_task.stop(false);
+  auto status = verify_task.get();
 
-  // Get python process status code
-  int status = child_task.get();
+  unsigned result = request.result();
+  switch (status) {
+  case VerifyRequest::Status::Answered:
+    break;
+  case VerifyRequest::Status::TimedOut:
+    syslog(LOG_ERR, "The Linux Hello service did not answer in time");
+    result = CompareError::TIMEOUT_REACHED;
+    break;
+  case VerifyRequest::Status::Unavailable:
+    syslog(LOG_ERR, "The Linux Hello service is not available: %s",
+           request.error().c_str());
+    result = CompareError::ABORT;
+    break;
+  default:
+    syslog(LOG_ERR, "Face verification failed: %s", request.error().c_str());
+    result = CompareError::ABORT;
+  }
+  if (status == VerifyRequest::Status::Answered && request.certainty() >= 0) {
+    syslog(LOG_DEBUG, "Best certainty %.2f", request.certainty());
+  }
 
-  // If the compare process failed (non-zero exit or killed by signal) and the
-  // user is being asked for a password, do not block authentication, let the
-  // password attempt proceed. This prevents lockout when compare.py crashes,
-  // gets OOM-killed, or times out while the user is typing.
-  if (ask_pass && ((WIFEXITED(status) && WEXITSTATUS(status) != EXIT_SUCCESS) ||
-                   WIFSIGNALED(status))) {
-    if (WIFSIGNALED(status)) {
-      syslog(LOG_WARNING,
-             "Compare process killed by signal %d, falling back to password",
-             WTERMSIG(status));
-    }
-
+  // When the face was not verified and the user is being asked for a
+  // password, let the password attempt proceed instead of failing
+  if (ask_pass && result != 0) {
     // Wait for the password to be typed
     pass_task.stop(false);
 
@@ -396,11 +387,15 @@ auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
     std::tie(pam_res, password) = pass_task.get();
 
     if (pam_res != PAM_SUCCESS) {
-      return linux_hello_status(username, status, config, conv_function);
+      return linux_hello_status(username, result, config, conv_function);
     }
 
     // The password has been entered, we are passing it to PAM stack
     return PAM_IGNORE;
+  }
+
+  if (status == VerifyRequest::Status::Unavailable) {
+    return PAM_AUTHINFO_UNAVAIL;
   }
 
   // We want to stop the password prompt, either by canceling the thread when
@@ -408,8 +403,11 @@ auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
   // "input"
 
   // UNSAFE: We cancel the thread using pthread, pam_get_authtok seems to be
-  // a cancellation point
-  if (workaround == Workaround::Native) {
+  // a cancellation point. Only when a prompt was started: without one there
+  // is no thread to cancel and no prompt to send Enter to.
+  if (!ask_pass) {
+    // Nothing to stop
+  } else if (workaround == Workaround::Native) {
     pass_task.stop(true);
   } else if (workaround == Workaround::Input) {
     // We check if we have the right permissions on /dev/uinput
@@ -451,7 +449,7 @@ auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
     pass_task.stop(false);
   }
 
-  return linux_hello_status(username, status, config, conv_function);
+  return linux_hello_status(username, result, config, conv_function);
 }
 
 // Called by PAM when a user needs to be authenticated, for example by running
