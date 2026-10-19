@@ -6,6 +6,10 @@
 import os
 import time
 
+# Stable symlink for each real node, so the config survives renumbering
+# of /dev/videoN across reboots and replugs. by-id wins over by-path.
+_stable_paths = {}
+
 
 def candidate_nodes():
 	"""Return a deduplicated list of v4l2 device nodes to probe"""
@@ -16,7 +20,9 @@ def candidate_nodes():
 	for stable_dir in ("/dev/v4l/by-id", "/dev/v4l/by-path"):
 		try:
 			for entry in os.listdir(stable_dir):
-				real = os.path.realpath(os.path.join(stable_dir, entry))
+				link = os.path.join(stable_dir, entry)
+				real = os.path.realpath(link)
+				_stable_paths.setdefault(real, link)
 				if real not in seen:
 					seen.add(real)
 					nodes.append(real)
@@ -36,6 +42,11 @@ def candidate_nodes():
 		pass
 
 	return nodes
+
+
+def stable_path(node):
+	"""Return the /dev/v4l symlink for a node, or the node itself"""
+	return _stable_paths.get(node, node)
 
 
 def probe_device(node, frames_wanted=3, timeout=2.0):
@@ -77,6 +88,7 @@ def probe_device(node, frames_wanted=3, timeout=2.0):
 
 	return {
 		"node": node,
+		"path": stable_path(node),
 		"ok": True,
 		"frames": len(captured),
 		"brightness": brightness,
@@ -118,5 +130,5 @@ def autodetect_device(verbose=False):
 			print("Probed {}: {}".format(result["node"],
 				"usable" if result.get("ok") else "unusable"))
 		if result.get("ok"):
-			return result["node"]
+			return result["path"]
 	return None
