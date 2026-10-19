@@ -52,8 +52,8 @@ interpreter and packages. Both produce the same PAM module, CLI and GUI.
 ### 1. Build dependencies
 
 All builds need: a C++20 compiler, `meson` (>= 0.60), `ninja`, `pkg-config`,
-`gettext` (translations) and the headers for `libpam`, `libevdev` and
-`inih`/`INIReader`.
+`gettext` (translations) and the headers for `libpam`, `libevdev`,
+`libsystemd` (sd-bus) and `inih`/`INIReader`.
 
 The bundled runtime additionally needs `curl` (or `wget`), `tar`, `python3`,
 `cmake` and network access: dlib is compiled from source against the bundled
@@ -64,21 +64,21 @@ Arch / CachyOS:
 
 ```sh
 sudo pacman -S --needed base-devel meson ninja gettext pkgconf \
-	libevdev libinih cmake curl ccache
+	libevdev libinih systemd cmake curl ccache
 ```
 
 Debian / Ubuntu:
 
 ```sh
 sudo apt install build-essential meson ninja-build gettext pkg-config \
-	libpam0g-dev libevdev-dev libinih-dev cmake curl python3
+	libpam0g-dev libevdev-dev libinih-dev libsystemd-dev cmake curl python3
 ```
 
 Fedora:
 
 ```sh
 sudo dnf install gcc-c++ meson ninja-build gettext pkgconf-pkg-config \
-	pam-devel libevdev-devel inih-devel cmake curl python3
+	pam-devel libevdev-devel inih-devel systemd-devel cmake curl python3
 ```
 
 ### 2. Runtime dependencies
@@ -154,14 +154,8 @@ settings page.
 - **ThinkPad X1 Yoga / Carbon (Chicony)**: if the emitter never lights up,
   the `chicony-ir-toggle` tool or `linux-enable-ir-emitter` can enable it
   persistently.
-- **SELinux-enforcing systems (Fedora)**: the display manager domain
-  (`xdm_t`) needs `map` permission on `/dev/video*` or camera open fails only
-  in GDM/lock-screen contexts (boltgolt/howdy#1117).
-- **Polkit >= 127**: the agent helper is sandboxed without device access; we
-  ship a systemd drop-in that re-enables camera access. If prompts still
-  fail, make sure the drop-in
-  `/usr/lib/systemd/system/polkit-agent-helper@.service.d/10-linux-hello.conf`
-  is installed and run `systemctl daemon-reload`.
+- **SELinux-enforcing systems (Fedora)**: if face unlock fails, check the
+  audit log for denials of `linux-hello-daemon` on `/dev/video*`.
 - **Hardware camera kill switches** are detected as a missing camera and fail
   gracefully back to password auth.
 
