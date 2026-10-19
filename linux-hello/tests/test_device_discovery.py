@@ -75,3 +75,16 @@ def test_unknown_formats_fall_back_to_grayscale_guess():
 	assert discovery.is_infrared({"formats": None, "saturation": 3.0})
 	assert not discovery.is_infrared({"formats": None, "saturation": 40.0})
 	assert discovery.is_infrared({"formats": ["Y16 "], "saturation": 40.0})
+
+
+def test_video_index_follows_stable_links(tmp_path, monkeypatch):
+	pytest.importorskip("cv2")
+	from recorders import video_capture
+
+	link = "/dev/v4l/by-path/pci-0000:00:14.0-usbv2-0:8:1.2-video-index0"
+	real = {link: "/dev/video2", "/dev/video2": "/dev/video2", "/dev/v4l/by-id/broken-video-index0": "/dev/v4l/by-id/broken-video-index0"}
+	monkeypatch.setattr(video_capture.os.path, "realpath", lambda path: real[path])
+	# The name ends in index0, but the device behind it is video2
+	assert video_capture.video_index(link) == 2
+	assert video_capture.video_index("/dev/video2") == 2
+	assert video_capture.video_index("/dev/v4l/by-id/broken-video-index0") is None

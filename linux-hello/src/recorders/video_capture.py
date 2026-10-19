@@ -15,6 +15,18 @@ from recorders.errors import CameraError
 # The internal recorder can be accessed with 'video_capture.internal'
 
 
+def video_index(path):
+	"""
+	OpenCV camera index of a device path, for backends that only take
+	numbers. Stable links end in "-video-index0" whatever the device, so
+	they are resolved to the /dev/videoN node first.
+	"""
+	import re
+
+	match = re.fullmatch(r"/dev/video(\d+)", os.path.realpath(path))
+	return int(match.group(1)) if match else None
+
+
 class VideoCapture:
 	def __init__(self, config):
 		"""
@@ -129,10 +141,9 @@ class VideoCapture:
 			# Start video capture on the IR camera through OpenCV
 			self.internal = cv2.VideoCapture(self.resolved_device_path, cv2.CAP_V4L)
 			if not self.internal.isOpened():
-				import re
-				m = re.search(r"(\d+)$", self.resolved_device_path)
-				if m:
-					self.internal = cv2.VideoCapture(int(m.group(1)))
+				index = video_index(self.resolved_device_path)
+				if index is not None:
+					self.internal = cv2.VideoCapture(index)
 			# Set the capture frame rate
 			# Without this the first detected (and possibly lower) frame rate is used, -1 seems to select the highest
 			# Use 0 as a fallback to avoid breaking an existing setup, new installs should default to -1
