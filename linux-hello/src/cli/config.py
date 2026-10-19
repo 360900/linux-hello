@@ -4,7 +4,7 @@
 import os
 import subprocess
 import shutil
-import paths_factory
+import settings
 
 from i18n import _
 
@@ -28,12 +28,15 @@ if not editor:
 if editor:
     editor_name = os.path.basename(editor)
 
+    # Local changes live in the override file, create it on first use
+    settings.ensure_override_file()
+
     # Let the user know what we're doing
     print(_("Opening config.ini in {editor}").format(editor=editor_name))
 
     # Open the editor as a subprocess and fork it
     try:
-        subprocess.call([editor, paths_factory.config_file_path()])
+        subprocess.call([editor, settings.override_path()])
     except Exception as e:
         print(_("Failed to open editor: {error}").format(error=e))
 else:

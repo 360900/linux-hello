@@ -125,7 +125,7 @@ sudo ninja -C build install
 Other build options (see `meson.options` for the full list):
 
 ```sh
-meson configure build -Dwith_webauthn=false -Dinstall_config=false
+meson configure build -Dwith_webauthn=false
 ```
 
 Handy follow-ups:

@@ -41,6 +41,10 @@ py_sources = [
     'compare.py',
     'openvino_face.py',
     'i18n.py',
+    'integration/__init__.py',
+    'integration/pam.py',
+    'models.py',
+    'settings.py',
     'paths_factory.py',
     'verification.py',
     'webauthn/__init__.py',
@@ -78,6 +82,7 @@ endif
 pam_module_conf_data = configuration_data(paths_dict)
 pam_module_conf_data.set('compare_script_path', join_paths(pysourcesinstalldir, 'compare.py'))
 pam_module_conf_data.set('config_file_path', config_path)
+pam_module_conf_data.set('vendor_config_path', vendorconfigpath)
 subdir('pam')
 if get_option('install_pam_config')
     # pamdir is inherited from the pam subproject
@@ -121,15 +126,14 @@ autocomplete = configure_file(
 install_data(
     autocomplete,
     install_dir: join_paths(get_option('prefix'), get_option('datadir'), 'bash-completion', 'completions'),
-    install_mode: 'rwxr--r--',
+    install_mode: 'rw-r--r--',
     install_tag: 'bash_completion',
     rename: 'linux-hello-cli',
 )
 
-fs = import('fs')
-if get_option('install_config') and not fs.exists(config_path)
-    install_data('config.ini', install_dir: confdir, install_mode: 'rwxr--r--', install_tag: 'config')
-endif
+# Defaults ship read-only with the package; local changes go to
+# /etc/linux-hello/config.ini, which the package never owns
+install_data('config.ini', install_dir: datadir, install_mode: 'rw-r--r--', install_tag: 'config')
 
 install_data('dlib-data/install.sh', 'dlib-data/Readme.md', install_dir: dlibdatadir, install_mode: 'rwxr--r--')
 

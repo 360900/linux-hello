@@ -2,17 +2,16 @@
 
 # Import required modules
 import os
-import configparser
 from datetime import timezone, datetime
 import snapshot
 import paths_factory
+import settings
 from recorders.video_capture import VideoCapture
 
 from i18n import _
 
 # Read the config
-config = configparser.ConfigParser()
-config.read(paths_factory.config_file_path())
+config = settings.load()
 
 # Start video capture
 video_capture = VideoCapture(config)

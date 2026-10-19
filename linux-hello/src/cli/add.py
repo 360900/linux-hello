@@ -1,11 +1,11 @@
 import time
 import os
 import sys
-import json
-import configparser
 import builtins
 import numpy as np
 import paths_factory
+import settings
+import models as model_store
 
 from recorders.video_capture import VideoCapture
 from recog import create_backend
@@ -21,25 +21,14 @@ except ImportError as err:
 
 import cv2
 
-config = configparser.ConfigParser()
-config.read(paths_factory.config_file_path())
+config = settings.load()
 
 use_cnn = config.getboolean("core", "use_cnn", fallback=False)
 
 user = builtins.linux_hello_user
-enc_file = paths_factory.user_model_path(user)
-encodings = []
-
-if not os.path.exists(paths_factory.user_models_dir_path()):
-	print(_("No face model folder found, creating one"))
-	os.makedirs(paths_factory.user_models_dir_path(), mode=0o700)
-
 # Load existing models before picking a backend so we can check
 # embedding compatibility with OpenVINO below
-try:
-	encodings = json.load(open(enc_file))
-except FileNotFoundError:
-	encodings = []
+encodings = model_store.load(user)
 
 try:
 	backend = create_backend(
@@ -146,15 +135,7 @@ if face_encoding is None:
 	print("Failed to encode face, aborting")
 	sys.exit(1)
 
-insert_model["data"].append(face_encoding.tolist())
-
-encodings.append(insert_model)
-
-with open(enc_file, "w") as datafile:
-	json.dump(encodings, datafile)
-
-# Restrict permissions so only root can read the biometric model
-os.chmod(enc_file, 0o600)
+model_store.add(user, label, [face_encoding.tolist()], insert_model["time"])
 
 # Give let the user know how it went
 print(_("""\nScan complete

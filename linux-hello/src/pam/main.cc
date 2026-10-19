@@ -25,7 +25,7 @@
 #include <string>
 #include <tuple>
 
-#include <INIReader.h>
+#include "layered_config.hh"
 
 #include <security/pam_appl.h>
 #include <security/pam_ext.h>
@@ -109,7 +109,7 @@ auto linux_hello_error(int status,
  * @param  conv_function PAM conversation function
  * @return          Returns the conversation function return code
  */
-auto linux_hello_status(char *username, int status, const INIReader &config,
+auto linux_hello_status(char *username, int status, const LayeredConfig &config,
                   const std::function<int(int, const char *)> &conv_function)
     -> int {
   if (status != EXIT_SUCCESS) {
@@ -137,7 +137,7 @@ auto linux_hello_status(char *username, int status, const INIReader &config,
  * @return        Returns PAM_AUTHINFO_UNAVAIL if it shouldn't be enabled,
  * PAM_SUCCESS otherwise
  */
-auto check_enabled(const INIReader &config, const char *username) -> int {
+auto check_enabled(const LayeredConfig &config, const char *username) -> int {
   // Stop executing if Linux Hello has been disabled in the config
   if (config.GetBoolean("core", "disabled", false)) {
     syslog(LOG_INFO, "Skipped authentication, Linux Hello is disabled");
@@ -218,12 +218,12 @@ auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
     return PAM_AUTHINFO_UNAVAIL;
   }
 
-  INIReader config(CONFIG_FILE_PATH);
+  LayeredConfig config(VENDOR_CONFIG_FILE_PATH, CONFIG_FILE_PATH);
 
-  // Error out if we could not read the config file
+  // Error out if we could not read the config files
   if (config.ParseError() != 0) {
-    syslog(LOG_ERR, "Failed to parse the configuration file: %s (%d)",
-           CONFIG_FILE_PATH, config.ParseError());
+    syslog(LOG_ERR, "Failed to parse the configuration: %s, %s (%d)",
+           VENDOR_CONFIG_FILE_PATH, CONFIG_FILE_PATH, config.ParseError());
     return PAM_AUTHINFO_UNAVAIL;
   }
 

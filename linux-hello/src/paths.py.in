@@ -14,3 +14,12 @@ log_path = PurePath("@log_path@")
 
 # Define the absolute path to the Linux Hello data directory
 data_dir = PurePath("@data_dir@")
+
+# Define the absolute path to the state directory (models, PAM manifest)
+state_dir = PurePath("@state_dir@")
+
+# Models directory of older versions, migrated to user_models_dir
+legacy_models_dir = PurePath("@legacy_models_dir@")
+
+# Define the absolute path to the read-only default config
+vendor_config_path = PurePath("@vendor_config_path@")

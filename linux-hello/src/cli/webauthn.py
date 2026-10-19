@@ -3,7 +3,6 @@
 # Called with: linux-hello-cli webauthn <action> [arguments...]
 
 import builtins
-import configparser
 import datetime
 import hashlib
 import json
@@ -11,6 +10,8 @@ import os
 import sys
 
 import paths_factory
+import settings
+import models as model_store
 
 from i18n import _
 
@@ -53,8 +54,7 @@ def require_state():
 
 
 def make_authenticator(state):
-	config = configparser.ConfigParser()
-	config.read(paths_factory.config_file_path())
+	config = settings.load()
 	verify_timeout = config.getfloat("webauthn", "verify_timeout", fallback=10.0)
 
 	store = CredentialStore(paths_factory.webauthn_credentials_path(user))
@@ -114,8 +114,7 @@ def cmd_status():
 	store = CredentialStore(paths_factory.webauthn_credentials_path(user))
 	print(_("Credentials for {}: {}").format(user, len(store.list_all())))
 
-	model_path = paths_factory.user_model_path(user)
-	print(_("Face model for {}: {}").format(user, _("yes") if os.path.isfile(model_path) else _("NO, add one with \"sudo linux-hello-cli add\"")))
+	print(_("Face model for {}: {}").format(user, _("yes") if model_store.load(user) else _("NO, add one with \"sudo linux-hello-cli add\"")))
 
 
 def cmd_list():

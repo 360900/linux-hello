@@ -4,7 +4,6 @@
 # CTAPHID transport into the authenticator. Run as root (needs /dev/uhid,
 # the camera and the root-only credential store).
 
-import configparser
 import logging
 import os
 import signal
@@ -12,6 +11,7 @@ import subprocess
 import sys
 
 import paths_factory
+import settings
 
 from i18n import _
 from verification import BoundVerifier
@@ -60,8 +60,7 @@ def run_service(state):
 	# captures into the journal (journalctl -u linux-hello-webauthn)
 	logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
 
-	config = configparser.ConfigParser()
-	config.read(paths_factory.config_file_path())
+	config = settings.load()
 
 	if not config.getboolean("webauthn", "enabled", fallback=False):
 		print(_("Linux Hello WebAuthn is disabled in the config ([webauthn] enabled = false)"))

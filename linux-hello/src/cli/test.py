@@ -1,19 +1,18 @@
-import configparser
 import builtins
 import os
-import json
 import sys
 import time
 import cv2
 import numpy as np
 import paths_factory
+import settings
+import models as model_store
 
 from i18n import _
 from recorders.video_capture import VideoCapture
 from recog import create_backend
 
-config = configparser.ConfigParser()
-config.read(paths_factory.config_file_path())
+config = settings.load()
 
 if config.get("video", "recording_plugin", fallback="opencv") != "opencv":
 	print(_("Linux Hello has been configured to use a recorder which doesn't support the test command yet, aborting"))
@@ -53,13 +52,10 @@ use_cnn = config.getboolean('core', 'use_cnn', fallback=False)
 encodings = []
 models = None
 
-try:
-	user = builtins.linux_hello_user
-	models = json.load(open(paths_factory.user_model_path(user)))
-	for model in models:
-		encodings += model["data"]
-except FileNotFoundError:
-	pass
+user = builtins.linux_hello_user
+models = model_store.load(user)
+for model in models:
+	encodings += model["data"]
 
 try:
 	backend = create_backend(

@@ -2,7 +2,10 @@ project('linux-hello', 'cpp', license: 'GPL-3.0', version: 'beta', meson_version
 
 dlibdatadir = get_option('dlib_data_dir') != '' ? get_option('dlib_data_dir') : join_paths(get_option('prefix'), get_option('datadir'), 'dlib-data')
 confdir = get_option('config_dir') != '' ? get_option('config_dir') : join_paths(get_option('prefix'), get_option('sysconfdir'), 'linux-hello')
-usermodelsdir = get_option('user_models_dir') != '' ? get_option('user_models_dir') : join_paths(confdir, 'models')
+statedir = get_option('state_dir')
+usermodelsdir = get_option('user_models_dir') != '' ? get_option('user_models_dir') : join_paths(statedir, 'models')
+# Vendor defaults; /etc/linux-hello/config.ini only holds local overrides
+vendorconfigpath = join_paths(get_option('prefix'), get_option('datadir'), 'linux-hello', 'config.ini')
 logpath = get_option('log_path')
 pythonpath = get_option('python_path')
 
@@ -22,6 +25,9 @@ paths_dict = {
     'config_dir': confdir,
     'dlib_data_dir': dlibdatadir,
     'user_models_dir': usermodelsdir,
+    'legacy_models_dir': join_paths(confdir, 'models'),
+    'state_dir': statedir,
+    'vendor_config_path': vendorconfigpath,
     'log_path': logpath,
     'python_path': pythonpath
 }

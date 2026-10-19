@@ -34,8 +34,6 @@ if "LINUX_HELLO_BLAS_THREADS" not in os.environ:
 	os.environ["OMP_NUM_THREADS"] = "1"
 	os.environ["GOTO_NUM_THREADS"] = "1"
 
-import json
-import configparser
 import cv2
 from datetime import timezone, datetime
 import atexit
@@ -44,6 +42,8 @@ import snapshot
 import numpy as np
 import _thread as thread
 import paths_factory
+import settings
+import models as model_store
 from recorders.video_capture import VideoCapture
 from recog import create_backend
 from i18n import _
@@ -112,17 +112,16 @@ lowest_certainty = 10
 backend = None
 
 try:
-	models = json.load(open(paths_factory.user_model_path(user)))
-	for model in models:
-		encodings += model["data"]
-except FileNotFoundError:
+	models = model_store.load(user)
+except model_store.ModelError:
 	exit(10)
+for model in models:
+	encodings += model["data"]
 
 if len(models) < 1:
 	exit(10)
 
-config = configparser.ConfigParser()
-config.read(paths_factory.config_file_path())
+config = settings.load()
 
 use_cnn = config.getboolean("core", "use_cnn", fallback=False)
 timeout = config.getfloat("video", "timeout", fallback=4.0)
