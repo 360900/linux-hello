@@ -7,7 +7,10 @@ import os
 import time
 
 # Stable symlink for each real node, so the config survives renumbering
-# of /dev/videoN across reboots and replugs. by-id wins over by-path.
+# of /dev/videoN across reboots and replugs. by-path wins: it names the USB
+# interface, while by-id only names the device, so the RGB and IR halves of
+# one camera module (same serial) race for the same by-id link and it can
+# point at either after a reboot.
 _stable_paths = {}
 
 
@@ -16,10 +19,10 @@ def candidate_nodes():
 	nodes = []
 	seen = set()
 
-	# Resolve stable by-id and by-path links first, they carry the most info
-	for stable_dir in ("/dev/v4l/by-id", "/dev/v4l/by-path"):
+	# Resolve stable links first, they carry the most info
+	for stable_dir in ("/dev/v4l/by-path", "/dev/v4l/by-id"):
 		try:
-			for entry in os.listdir(stable_dir):
+			for entry in sorted(os.listdir(stable_dir)):
 				link = os.path.join(stable_dir, entry)
 				real = os.path.realpath(link)
 				_stable_paths.setdefault(real, link)
@@ -202,16 +205,22 @@ def discover_cameras(probe_all=True, per_device_timeout=2.0):
 
 def autodetect_device(verbose=False):
 	"""
-	Pick the best camera device path for Linux Hello. Infrared cameras are
-	tried first and colour cameras are only opened when no infrared one
-	works. Runs on every attempt on purpose: a cached pick would stick to
-	the webcam after the IR camera was missing once, even once it is back.
-	Returns the device path string, or None when no usable camera exists.
+	Pick the best camera device path for Linux Hello. When the machine has
+	an infrared camera only infrared cameras are used: falling back to the
+	webcam would compare colour frames against IR models and accept a face
+	from a photo more easily. Colour cameras are for machines without IR.
+	Runs on every attempt on purpose: a cached pick would stick to the
+	webcam after the IR camera was missing once, even once it is back.
+
+	Returns the device path string, or None when there is no camera at
+	all. Raises CameraError when an IR camera exists but delivers no frames.
 	"""
 	results = discover_cameras(probe_all=False)
-	if not any(r.get("ok") for r in results):
-		# Advertised IR devices did not deliver frames: try everything
-		results = discover_cameras(probe_all=True)
+	infrared = [r for r in results if r.get("infrared")]
+	if infrared and not any(r.get("ok") for r in infrared):
+		from recorders.errors import CameraError
+		raise CameraError("The infrared camera ({}) delivers no frames".format(
+			", ".join(r["node"] for r in infrared)))
 
 	for result in results:
 		if verbose:

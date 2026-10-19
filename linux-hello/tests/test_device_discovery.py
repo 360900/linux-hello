@@ -54,11 +54,21 @@ def test_reconnected_ir_camera_wins_again(fake, monkeypatch):
 	assert opened == ["/dev/video2"]
 
 
-def test_falls_back_to_rgb_when_ir_gives_no_frames(fake):
+def test_broken_ir_camera_never_falls_back_to_the_webcam(fake):
+	from recorders.errors import CameraError
+
 	opened, frames = fake
 	frames["/dev/video2"] = {"ok": False, "frames": 0}
+	with pytest.raises(CameraError) as error:
+		discovery.autodetect_device()
+	assert "infrared camera" in str(error.value)
+	assert "/dev/video0" not in opened
+
+
+def test_webcam_is_used_without_any_ir_camera(fake, monkeypatch):
+	opened, _frames = fake
+	monkeypatch.setattr(discovery, "candidate_nodes", lambda: ["/dev/video0", "/dev/video1"])
 	assert discovery.autodetect_device() == "/dev/v4l/by-path/video0"
-	assert "/dev/video0" in opened
 
 
 def test_listing_probes_capture_nodes_only(fake):
@@ -88,3 +98,35 @@ def test_video_index_follows_stable_links(tmp_path, monkeypatch):
 	assert video_capture.video_index(link) == 2
 	assert video_capture.video_index("/dev/video2") == 2
 	assert video_capture.video_index("/dev/v4l/by-id/broken-video-index0") is None
+
+
+def test_by_path_wins_over_ambiguous_by_id(monkeypatch):
+	# The user's ThinkPad: RGB (interface 1.0) and IR (1.2) share one USB
+	# serial, so the single by-id "index0" link points at whichever node
+	# udev handled last, here the IR camera
+	links = {
+		"/dev/v4l/by-id": {"usb-Generic_Integrated_Camera_200901010001-video-index0": "/dev/video2"},
+		"/dev/v4l/by-path": {
+			"pci-0000:00:14.0-usb-0:8:1.0-video-index0": "/dev/video0",
+			"pci-0000:00:14.0-usb-0:8:1.2-video-index0": "/dev/video2",
+		},
+	}
+
+	def listdir(directory):
+		if directory == "/dev":
+			return ["video0", "video2"]
+		return list(links[directory])
+
+	def realpath(path):
+		for directory, entries in links.items():
+			if path.startswith(directory + "/"):
+				return entries[path[len(directory) + 1:]]
+		return path
+
+	monkeypatch.setattr(discovery.os, "listdir", listdir)
+	monkeypatch.setattr(discovery.os.path, "realpath", realpath)
+	monkeypatch.setattr(discovery, "_stable_paths", {})
+
+	assert sorted(discovery.candidate_nodes()) == ["/dev/video0", "/dev/video2"]
+	assert discovery.stable_path("/dev/video2") == "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:8:1.2-video-index0"
+	assert discovery.stable_path("/dev/video0") == "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:8:1.0-video-index0"
