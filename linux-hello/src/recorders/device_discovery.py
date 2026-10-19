@@ -212,9 +212,23 @@ def autodetect_device(verbose=False):
 	Runs on every attempt on purpose: a cached pick would stick to the
 	webcam after the IR camera was missing once, even once it is back.
 
+	A single IR camera is used straight away: its advertised format says
+	enough, and test streaming it first would cost about half a second per
+	attempt. If it is broken, opening it for the scan reports that.
+
 	Returns the device path string, or None when there is no camera at
-	all. Raises CameraError when an IR camera exists but delivers no frames.
+	all. Raises CameraError when IR cameras exist but none delivers frames.
 	"""
+	infrared_nodes = []
+	for node in candidate_nodes():
+		formats = capture_formats(node)
+		if formats and any(fmt in IR_FORMATS for fmt in formats):
+			infrared_nodes.append(node)
+	if len(infrared_nodes) == 1:
+		if verbose:
+			print("Using the only infrared camera {}".format(infrared_nodes[0]))
+		return stable_path(infrared_nodes[0])
+
 	results = discover_cameras(probe_all=False)
 	infrared = [r for r in results if r.get("infrared")]
 	if infrared and not any(r.get("ok") for r in infrared):

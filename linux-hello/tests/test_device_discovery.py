@@ -33,10 +33,19 @@ def fake(monkeypatch):
 	return opened, frames
 
 
-def test_autodetect_never_opens_the_webcam_when_ir_exists(fake):
+def test_single_ir_camera_is_used_without_test_streaming(fake):
 	opened, _frames = fake
 	assert discovery.autodetect_device() == "/dev/v4l/by-path/video2"
-	assert opened == ["/dev/video2"]
+	assert opened == []
+
+
+def test_several_ir_cameras_are_ranked_without_the_webcam(fake, monkeypatch):
+	opened, frames = fake
+	monkeypatch.setitem(DEVICES, "/dev/video4", ["Y16 "])
+	monkeypatch.setattr(discovery, "candidate_nodes", lambda: list(DEVICES))
+	frames["/dev/video4"] = {"ok": True, "frames": 3, "brightness": 90.0, "saturation": 0.0}
+	assert discovery.autodetect_device() == "/dev/v4l/by-path/video2"
+	assert sorted(opened) == ["/dev/video2", "/dev/video4"]
 
 
 def test_reconnected_ir_camera_wins_again(fake, monkeypatch):
@@ -49,16 +58,20 @@ def test_reconnected_ir_camera_wins_again(fake, monkeypatch):
 	# Plugged back in: the very next attempt uses it, without a restart
 	monkeypatch.setattr(discovery, "candidate_nodes", lambda: list(DEVICES))
 	monkeypatch.setitem(DEVICES, "/dev/video2", ["GREY"])
-	opened.clear()
 	assert discovery.autodetect_device() == "/dev/v4l/by-path/video2"
-	assert opened == ["/dev/video2"]
 
 
-def test_broken_ir_camera_never_falls_back_to_the_webcam(fake):
+def test_broken_ir_camera_never_falls_back_to_the_webcam(fake, monkeypatch):
 	from recorders.errors import CameraError
 
 	opened, frames = fake
+	# A single IR camera is handed over as is, opening it for the scan fails
 	frames["/dev/video2"] = {"ok": False, "frames": 0}
+	assert discovery.autodetect_device() == "/dev/v4l/by-path/video2"
+
+	# Several broken IR cameras: an error, still never the webcam
+	monkeypatch.setitem(DEVICES, "/dev/video4", ["GREY"])
+	monkeypatch.setattr(discovery, "candidate_nodes", lambda: list(DEVICES))
 	with pytest.raises(CameraError) as error:
 		discovery.autodetect_device()
 	assert "infrared camera" in str(error.value)
