@@ -26,6 +26,14 @@ VERSION = "0.1"
 ENROLL_SAMPLES = 5
 ENROLL_TIMEOUT = 30.0
 
+# The lock screen retries a failed scan at once. After this many failed
+# scans in a row the camera stays off until there is input activity.
+PAUSE_AFTER = 3
+# A failure later than this after the previous one starts a new streak
+STREAK_SECONDS = 30.0
+# Longest wait per request, below the PAM module's call timeout
+PAUSE_SECONDS = 25.0
+
 
 class Manager:
 	def __init__(self, access, emit, engine=None, pam=None):
@@ -36,6 +44,8 @@ class Manager:
 		self.camera_lock = asyncio.Lock()
 		# sender -> threading.Event of the request it may cancel
 		self.running = {}
+		# user -> (failed scans in a row, monotonic time of the last one)
+		self.failures = {}
 
 	def methods(self):
 		return {
@@ -111,6 +121,16 @@ class Manager:
 		if not encodings:
 			return [int(VerificationResult.NO_FACE_MODEL), -1.0]
 
+		# Callers other than root verifying themselves are the lock screen,
+		# which keeps retrying while nobody is in front of the camera
+		lock_screen = caller.uid != 0
+		if lock_screen and self._streak(user) >= PAUSE_AFTER:
+			resumed, cancelled = await self._wait_for_activity(caller, user)
+			if not resumed:
+				result = VerificationResult.CANCELLED if cancelled else VerificationResult.TIMEOUT_REACHED
+				return [int(result), -1.0]
+			self.failures.pop(user, None)
+
 		def work(cancel):
 			config = self.engine.config
 			save_failed = config.getboolean("snapshots", "save_failed", fallback=False)
@@ -128,9 +148,39 @@ class Manager:
 			return result, stats
 
 		result, stats = await self._camera(caller, work)
+		if lock_screen:
+			if result == VerificationResult.SUCCESS:
+				self.failures.pop(user, None)
+			elif result in (VerificationResult.TIMEOUT_REACHED, VerificationResult.TOO_DARK):
+				self.failures[user] = (self._streak(user) + 1, time.monotonic())
 		certainty = stats.as_dict()["best_certainty"]
 		log.info("uid %d: verified %s: %s, best certainty %s", caller.uid, user, VerificationResult(result).name, certainty)
 		return [int(result), -1.0 if certainty is None else float(certainty)]
+
+	def _streak(self, user):
+		count, last = self.failures.get(user, (0, 0.0))
+		if time.monotonic() - last > STREAK_SECONDS:
+			return 0
+		return count
+
+	async def _wait_for_activity(self, caller, user):
+		"""(resumed, cancelled): wait with the camera off until input arrives"""
+		from daemon import presence
+
+		log.info("Pausing face scans for %s until input activity", user)
+		cancel = threading.Event()
+		self.running[caller.sender] = cancel
+		try:
+			resumed = await asyncio.to_thread(presence.wait_for_activity, cancel, PAUSE_SECONDS)
+		finally:
+			self.running.pop(caller.sender, None)
+		if not resumed and not cancel.is_set():
+			# Still away: keep the streak alive for the lock screen's next try
+			count, _last = self.failures.get(user, (PAUSE_AFTER, 0.0))
+			self.failures[user] = (count, time.monotonic())
+		elif resumed:
+			log.info("Input activity, resuming face scans for %s", user)
+		return resumed, cancel.is_set()
 
 	# -- enrolment -------------------------------------------------------------
 	async def enroll(self, caller, user, label):

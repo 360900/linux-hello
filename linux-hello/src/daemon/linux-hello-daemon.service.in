@@ -23,6 +23,9 @@ PrivateNetwork=yes
 NoNewPrivileges=yes
 DevicePolicy=closed
 DeviceAllow=char-video4linux rw
+# Input activity ends the pause of lock screen scans; events are only
+# counted, never interpreted
+DeviceAllow=char-input r
 # OpenVINO runs on the iGPU
 DeviceAllow=char-drm rw
 ProtectKernelTunables=yes

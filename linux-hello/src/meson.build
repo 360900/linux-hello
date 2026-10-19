@@ -39,6 +39,7 @@ py_sources = [
     'daemon/dispatch.py',
     'daemon/io.github.LinuxHello1.xml',
     'daemon/manager.py',
+    'daemon/presence.py',
     'emitter.py',
     'engine.py',
     'openvino_face.py',

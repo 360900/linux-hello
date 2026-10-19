@@ -376,3 +376,79 @@ def test_disabling_lock_screen_protects_users_starting_with_face(env, monkeypatc
 
 	assert not os.path.exists(os.path.join(env, "etc/pam.d/kde-face"))
 	assert os.path.exists(os.path.join(env, pam.KSCREENLOCKER_CONFIG)) is kept
+
+
+class ScriptedEngine(FakeEngine):
+	"""Answers verify with the given results in turn"""
+
+	def __init__(self, results):
+		super().__init__()
+		self.results = list(results)
+
+	def verify(self, encodings, cancelled=None, keep_frames=None, after_match=None):
+		self.verify_calls.append(encodings)
+		return self.results.pop(0), FakeStats()
+
+
+def make_scripted(env, results):
+	from daemon.manager import Manager
+	from integration.pam import PamIntegration
+
+	engine = ScriptedEngine(results)
+	return Manager(FakeAccess(), lambda *args: None, engine, PamIntegration(env)), engine
+
+
+def test_lock_screen_pauses_after_failed_scans(env, monkeypatch):
+	import models as model_store
+	from daemon import presence
+	from verification import VerificationResult as R
+
+	model_store.add(ME, "a", [[0.1]], 1)
+	manager, engine = make_scripted(env, [R.TIMEOUT_REACHED] * 3 + [R.SUCCESS])
+	waits = []
+	answers = [False, True]
+	monkeypatch.setattr(presence, "wait_for_activity", lambda cancel, timeout: waits.append(timeout) or answers.pop(0))
+
+	for _ in range(3):
+		assert run(manager.verify(caller(MY_UID), ME))[0] == R.TIMEOUT_REACHED
+	assert len(engine.verify_calls) == 3
+
+	# Nobody came back: no scan, the camera stays off
+	assert run(manager.verify(caller(MY_UID), ME))[0] == R.TIMEOUT_REACHED
+	assert len(engine.verify_calls) == 3
+	assert waits == [25.0]
+
+	# Input activity: scanning resumes with a fresh streak
+	assert run(manager.verify(caller(MY_UID), ME))[0] == R.SUCCESS
+	assert len(engine.verify_calls) == 4
+	assert manager.failures == {}
+
+
+def test_root_callers_never_pause(env, monkeypatch):
+	import models as model_store
+	from daemon import presence
+	from verification import VerificationResult as R
+
+	model_store.add(ME, "a", [[0.1]], 1)
+	manager, engine = make_scripted(env, [R.TIMEOUT_REACHED] * 5)
+	monkeypatch.setattr(presence, "wait_for_activity", lambda cancel, timeout: pytest.fail("paused sudo"))
+	for _ in range(5):
+		run(manager.verify(caller(0), ME))
+	assert len(engine.verify_calls) == 5
+
+
+def test_success_and_time_reset_the_streak(env, monkeypatch):
+	import models as model_store
+	from verification import VerificationResult as R
+
+	model_store.add(ME, "a", [[0.1]], 1)
+	manager, _engine = make_scripted(env, [R.TIMEOUT_REACHED, R.TIMEOUT_REACHED, R.SUCCESS, R.TIMEOUT_REACHED])
+	manager_module = sys.modules[type(manager).__module__]
+	for _ in range(3):
+		run(manager.verify(caller(MY_UID), ME))
+	assert manager._streak(ME) == 0
+
+	run(manager.verify(caller(MY_UID), ME))
+	assert manager._streak(ME) == 1
+	monkeypatch.setattr(manager_module, "STREAK_SECONDS", -1)
+	assert manager._streak(ME) == 0
