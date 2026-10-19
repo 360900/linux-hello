@@ -241,7 +241,7 @@ class Manager:
 				result["path"],
 				result["node"],
 				_camera_name(result["node"]),
-				result.get("saturation", 255) <= 16,
+				bool(result.get("infrared")),
 				float(result.get("brightness", 0.0)),
 			])
 		return [cameras]
