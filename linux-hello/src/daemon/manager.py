@@ -220,7 +220,13 @@ class Manager:
 			if enabled:
 				self.pam.enable(target)
 			else:
-				self.pam.disable(target)
+				keep = []
+				if target == "lock-screen":
+					from integration import kscreenlocker
+					keep = kscreenlocker.users_preferring_face()
+				if keep:
+					log.warning("Keeping the lock screen's Face option: %s still start with it", ", ".join(keep))
+				self.pam.disable(target, keep_kde_config=bool(keep))
 		except PamError as error:
 			log.warning("uid %d: could not %s %s: %s", caller.uid, "enable" if enabled else "disable", target, error)
 			raise Failed("Failed", str(error))

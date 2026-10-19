@@ -55,3 +55,54 @@ def test_disabling_only_undoes_face(tmp_path):
 
 def test_state_path_follows_xdg():
 	assert kscreenlocker.state_path({"XDG_STATE_HOME": "/x"}) == "/x/kscreenlockerrc"
+
+
+def test_face_enabled_user_value_wins(tmp_path):
+	user = str(tmp_path / "user")
+	system = str(tmp_path / "system")
+	assert not kscreenlocker.face_enabled(user, system)
+
+	write(system, "[Authenticators]\nFace=true\n")
+	assert kscreenlocker.face_enabled(user, system)
+
+	write(user, "[Authenticators]\nFace=false\n")
+	assert not kscreenlocker.face_enabled(user, system)
+
+	# Later entries win, as in KConfig
+	write(user, "[Authenticators]\nFace=false\n[Other]\nx=1\n[Authenticators]\nFace=true\n")
+	assert kscreenlocker.face_enabled(user, system)
+
+
+def fake_users(monkeypatch, tmp_path, choices):
+	import pwd
+	me = pwd.getpwuid(os.getuid())
+	entries = []
+	for name, choice in choices.items():
+		path = str(tmp_path / name / "kscreenlockerrc")
+		os.makedirs(os.path.dirname(path))
+		if choice:
+			write(path, "[Greeter]\nAuthenticator={}\n".format(choice))
+		entry = pwd.struct_passwd((name, "x", me.pw_uid, me.pw_gid, "", str(tmp_path / name), "/bin/sh"))
+		entries.append((entry, path))
+	monkeypatch.setattr(kscreenlocker, "user_state_paths", lambda: entries)
+	return entries
+
+
+def test_users_preferring_face(monkeypatch, tmp_path):
+	fake_users(monkeypatch, tmp_path, {"alice": "Face", "bob": "Regular", "carol": None})
+	assert kscreenlocker.users_preferring_face() == ["alice"]
+
+
+def test_reset_all_users_only_touches_face(monkeypatch, tmp_path):
+	entries = fake_users(monkeypatch, tmp_path, {"alice": "Face", "bob": "Fingerprint"})
+	assert kscreenlocker.reset_all_users() == ["alice"]
+	assert kscreenlocker.read_choice(entries[0][1]) == "Regular"
+	assert kscreenlocker.read_choice(entries[1][1]) == "Fingerprint"
+
+
+def test_as_user_runs_with_the_users_identity(tmp_path):
+	import pwd
+	me = pwd.getpwuid(os.getuid())
+	seen = []
+	assert kscreenlocker._as_user(me, lambda: seen.append(os.geteuid()))
+	assert seen == [os.getuid()]

@@ -379,10 +379,21 @@ class PamIntegration:
 				self._enable_insert(service, target, state)
 		self._save_state(state)
 
-	def disable(self, target):
+	def disable(self, target, keep_kde_config=False):
+		"""
+		keep_kde_config leaves the lock screen's Face option in place while
+		some user's lock screen still starts with it: removing it then
+		crashes kscreenlocker for that user. Face unlock itself stops
+		working as the PAM stack is gone.
+		"""
 		state = self._load_state()
 		for service, kind in self._plan(target):
-			path = self._path(KSCREENLOCKER_CONFIG) if kind == "kde-config" else self._etc(service)
+			if kind == "kde-config":
+				if keep_kde_config:
+					continue
+				path = self._path(KSCREENLOCKER_CONFIG)
+			else:
+				path = self._etc(service)
 			self._revert(path, state)
 		self._save_state(state)
 

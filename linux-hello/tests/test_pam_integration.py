@@ -360,3 +360,17 @@ def test_reset_without_manifest_removes_config_block(tmp_path):
 	integration.reset()
 	assert pam.BEGIN not in read(root, pam.KSCREENLOCKER_CONFIG)
 	assert read(root, pam.KSCREENLOCKER_CONFIG).startswith("[Greeter]\nTheme=breeze\n")
+
+
+def test_disable_keeps_face_option_while_users_start_with_it(tmp_path):
+	root = tree("arch", tmp_path)
+	integration = PamIntegration(root)
+	integration.enable("lock-screen")
+
+	integration.disable("lock-screen", keep_kde_config=True)
+	assert not os.path.exists(os.path.join(root, "etc/pam.d/kde-face"))
+	assert "Face=true" in read(root, pam.KSCREENLOCKER_CONFIG)
+
+	# Once nobody depends on it, a later disable or reset removes it
+	integration.reset()
+	assert not os.path.exists(os.path.join(root, pam.KSCREENLOCKER_CONFIG))

@@ -144,6 +144,12 @@ def cmd_status(client, args):
 
 def cmd_doctor(client, args):
 	checks = client.call("Diagnose")[0]
+	if os.geteuid() != 0:
+		from integration import kscreenlocker
+		if kscreenlocker.read_choice(kscreenlocker.state_path()) == kscreenlocker.FACE and not kscreenlocker.face_enabled():
+			kscreenlocker.stop_preferring_face()
+			checks.append(["lock-screen-choice", "warning",
+				_("Your lock screen started with Face while Face is off, which crashes it. Switched it back to the password.")])
 	copies = cli_copies()
 	if len(copies) > 1:
 		checks.append(["duplicates-cli", "warning",
@@ -267,14 +273,18 @@ def cmd_targets(client, args):
 def cmd_enable(client, args, enabled=True):
 	if not args.arguments:
 		fail(_("Give a target: lock-screen, admin, sudo or login"))
+	# Hand the lock screen back to the password before the Face option can
+	# go away: kscreenlocker crashes when the choice outlives the option
+	if not enabled and "lock-screen" in args.arguments:
+		lock_screen_choice(client, False)
 	client.start_tty_agent()
 	try:
 		for target in args.arguments:
 			client.call("SetTarget", "sb", [target, enabled])
 	finally:
 		client.stop_tty_agent()
-	if "lock-screen" in args.arguments:
-		lock_screen_choice(client, enabled)
+	if enabled and "lock-screen" in args.arguments:
+		lock_screen_choice(client, True)
 
 
 def lock_screen_choice(client, enabled):
@@ -291,6 +301,9 @@ def lock_screen_choice(client, enabled):
 	from integration import kscreenlocker
 	try:
 		if enabled:
+			if not kscreenlocker.face_enabled():
+				print(_("The lock screen's Face option is not in effect, keeping the password as its start"))
+				return
 			kscreenlocker.prefer_face()
 			print(_("The lock screen now starts with face unlock. Your password stays one click away."))
 		else:
@@ -353,6 +366,12 @@ def cmd_cameras(client, args):
 def cmd_reset_system(args):
 	from integration.pam import PamIntegration
 
+	from integration import kscreenlocker
+
+	# Before the Face option goes: kscreenlocker crashes for users whose
+	# lock screen still starts with it
+	for name in kscreenlocker.reset_all_users():
+		print(_("Lock screen of {} starts with the password again").format(name))
 	changed = PamIntegration().reset()
 	for path in changed:
 		print(_("Restored {}").format(path))

@@ -15,7 +15,9 @@ ReadWritePaths=/etc/pam.d
 # kscreenlockerrc, which turns on face unlock on the Plasma lock screen
 ReadWritePaths=-/etc/xdg
 ProtectSystem=strict
-ProtectHome=yes
+# Read only: disabling face unlock on the lock screen checks which users'
+# lock screens still start with it
+ProtectHome=read-only
 PrivateTmp=yes
 PrivateNetwork=yes
 NoNewPrivileges=yes

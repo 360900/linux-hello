@@ -363,3 +363,16 @@ def test_rubberstamps_outcome(env, monkeypatch):
 			sys.exit(code)
 		monkeypatch.setitem(sys.modules, "rubberstamps", types.SimpleNamespace(execute=execute))
 		assert _rubberstamps(config, None, backend) is accepted
+
+
+@pytest.mark.parametrize("starting_with_face, kept", [([], False), (["alice"], True)])
+def test_disabling_lock_screen_protects_users_starting_with_face(env, monkeypatch, starting_with_face, kept):
+	from integration import kscreenlocker, pam
+
+	monkeypatch.setattr(kscreenlocker, "users_preferring_face", lambda: starting_with_face)
+	manager, _, _ = make_manager(env, allowed={"io.github.linuxhello.configure"})
+	run(manager.set_target(caller(MY_UID), "lock-screen", True))
+	run(manager.set_target(caller(MY_UID), "lock-screen", False))
+
+	assert not os.path.exists(os.path.join(env, "etc/pam.d/kde-face"))
+	assert os.path.exists(os.path.join(env, pam.KSCREENLOCKER_CONFIG)) is kept
