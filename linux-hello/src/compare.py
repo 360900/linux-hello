@@ -16,12 +16,12 @@ def handle_sigint(signum, frame):
 import signal
 signal.signal(signal.SIGINT, handle_sigint)
 
-# Import time so we can start timing asap
+# Face verification for the PAM module: compare.py <user>
+# Communicates only through its exit status, see VerificationResult.
+
 import time
 
-timings = {
-	"st": time.time()
-}
+started = time.time()
 
 import sys
 import os
@@ -34,294 +34,142 @@ if "LINUX_HELLO_BLAS_THREADS" not in os.environ:
 	os.environ["OMP_NUM_THREADS"] = "1"
 	os.environ["GOTO_NUM_THREADS"] = "1"
 
-import cv2
-from datetime import timezone, datetime
 import atexit
 import subprocess
-import snapshot
-import numpy as np
-import _thread as thread
+from datetime import timezone, datetime
+
+import models as model_store
 import paths_factory
 import settings
-import models as model_store
-from recorders.video_capture import VideoCapture
-from recog import create_backend
+import snapshot
+from engine import Engine
 from i18n import _
+from verification import VerificationResult
 
-def exit(code=None):
-	global ui_proc
-	if "ui_proc" in globals():
+ui_proc = None
+
+
+def close_ui():
+	if ui_proc is not None:
 		ui_proc.terminate()
-	if code is not None:
-		sys.exit(code)
-
-
-def init_detector(lock):
-	global backend
-
-	try:
-		backend = create_backend(
-			use_cnn=use_cnn,
-			enrolled_dims={len(e) for e in encodings},
-			mismatch_hint="Re-run 'sudo linux-hello-cli add' to re-enroll for OpenVINO.")
-	except FileNotFoundError:
-		print(_("Data files have not been downloaded, please run the following commands:"))
-		print("\n\tcd " + paths_factory.dlib_data_dir_path())
-		print("\tsudo ./install.sh\n")
-		lock.release()
-		exit(1)
-
-	timings["ll"] = time.time() - timings["ll"]
-	lock.release()
-
-
-def make_snapshot(type):
-	snapshot.generate(snapframes, [
-		type + _(" LOGIN"),
-		_("Date: ") + datetime.now(timezone.utc).strftime("%Y/%m/%d %H:%M:%S UTC"),
-		_("Scan time: ") + str(round(time.monotonic() - timings["fr"], 2)) + "s",
-		_("Frames: ") + str(frames) + " (" + str(round(frames / (time.monotonic() - timings["fr"]), 2)) + "FPS)",
-		_("Hostname: ") + os.uname().nodename,
-		_("Best certainty value: ") + str(round(lowest_certainty * 10, 1))
-	])
 
 
 def send_to_ui(type, message):
-	global ui_proc
-	if "ui_proc" in globals():
-		message = type + "=" + message + " \n"
-		try:
-			if ui_proc.poll() is None:
-				ui_proc.stdin.write(bytearray(message.encode("utf-8")))
-				ui_proc.stdin.flush()
-		except IOError:
-			pass
+	if ui_proc is None:
+		return
+	try:
+		if ui_proc.poll() is None:
+			ui_proc.stdin.write((type + "=" + message + " \n").encode("utf-8"))
+			ui_proc.stdin.flush()
+	except IOError:
+		pass
 
 
 if len(sys.argv) < 2:
-	exit(12)
+	sys.exit(VerificationResult.ABORT)
 
 user = sys.argv[1]
-models = []
-encodings = []
-black_tries = 0
-dark_tries = 0
-frames = 0
-snapframes = []
-lowest_certainty = 10
-backend = None
 
 try:
 	models = model_store.load(user)
 except model_store.ModelError:
-	exit(10)
-for model in models:
-	encodings += model["data"]
-
-if len(models) < 1:
-	exit(10)
+	sys.exit(VerificationResult.NO_FACE_MODEL)
+encodings = [encoding for model in models for encoding in model["data"]]
+if not encodings:
+	sys.exit(VerificationResult.NO_FACE_MODEL)
 
 config = settings.load()
-
-use_cnn = config.getboolean("core", "use_cnn", fallback=False)
-timeout = config.getfloat("video", "timeout", fallback=4.0)
-# Parse the dark threshold; "auto" enables adaptive rejection which learns
-# the scene's darkness baseline and needs no manual tuning
-dark_threshold_raw = str(config.get("video", "dark_threshold", fallback="60")).strip().lower()
-dark_threshold_auto = dark_threshold_raw in ("auto", "none")
-if not dark_threshold_auto:
-	dark_threshold = float(dark_threshold_raw)
-dark_history = []
-video_certainty = config.getfloat("video", "certainty", fallback=3.5) / 10
 end_report = config.getboolean("debug", "end_report", fallback=False)
 save_failed = config.getboolean("snapshots", "save_failed", fallback=False)
 save_successful = config.getboolean("snapshots", "save_successful", fallback=False)
-ui_stdout = config.getboolean("debug", "ui_stdout", fallback=False)
-rotate = config.getint("video", "rotate", fallback=0)
-
-ui_pipe = sys.stdout if ui_stdout else subprocess.DEVNULL
+ui_pipe = sys.stdout if config.getboolean("debug", "ui_stdout", fallback=False) else subprocess.DEVNULL
 
 try:
 	ui_proc = subprocess.Popen(["linux-hello", "--start-auth-ui"], stdin=subprocess.PIPE, stdout=ui_pipe, stderr=ui_pipe)
-	atexit.register(exit)
+	atexit.register(close_ui)
 except FileNotFoundError:
 	pass
 
-send_to_ui("M", _("Starting up..."))
-
-timings["in"] = time.time() - timings["st"]
-
-# Open camera FIRST, before loading OpenVINO
-timings["ic"] = time.time()
-video_capture = VideoCapture(config)
-exposure = config.getint("video", "exposure", fallback=-1)
-timings["ic"] = time.time() - timings["ic"]
-
-# THEN load OpenVINO in background thread
-timings["ll"] = time.time()
-lock = thread.allocate_lock()
-lock.acquire()
-thread.start_new_thread(init_detector, (lock, ))
-
-lock.acquire()
-lock.release()
-del lock
-
-max_height = config.getfloat("video", "max_height", fallback=320.0)
-height = video_capture.internal.get(cv2.CAP_PROP_FRAME_HEIGHT) or 1
-if rotate == 2:
-	height = video_capture.internal.get(cv2.CAP_PROP_FRAME_WIDTH) or 1
-scaling_factor = (max_height / height) or 1
-
-timeout = config.getfloat("video", "timeout", fallback=4.0)
-end_report = config.getboolean("debug", "end_report", fallback=False)
-
-clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-
 send_to_ui("M", _("Identifying you..."))
 
-frames = 0
-valid_frames = 0
-# monotonic so suspend/resume wall-clock jumps (NTP corrections) don't
-# instantly burn the whole scan timeout (boltgolt/howdy#1131)
-timings["fr"] = time.monotonic()
-dark_running_total = 0
+engine = Engine(config)
+snapframes = [] if (save_failed or save_successful) else None
 
-while True:
-	frames += 1
 
-	ui_subtext = "Scanned " + str(valid_frames - dark_tries) + " frames"
-	if (dark_tries > 1):
-		ui_subtext += " (skipped " + str(dark_tries) + " dark frames)"
-	send_to_ui("S", ui_subtext)
+def progress(update):
+	text = _("Scanned {} frames").format(update["frames"] - update["dark_frames"])
+	if update["dark_frames"] > 1:
+		text += _(" (skipped {} dark frames)").format(update["dark_frames"])
+	send_to_ui("S", text)
 
-	if time.monotonic() - timings["fr"] > timeout:
-		if save_failed:
-			make_snapshot(_("FAILED"))
-		if dark_tries == valid_frames:
-			print(_("All frames were too dark, please check dark_threshold in config"))
-			print(_("Average darkness: {avg}, Threshold: {threshold}").format(avg=str(dark_running_total / max(1, valid_frames)), threshold=("auto" if dark_threshold_auto else str(dark_threshold))))
-			exit(13)
-		else:
-			exit(11)
 
-	frame, gsframe = video_capture.read_frame()
-	gsframe = clahe.apply(gsframe)
+def rubberstamps_hook(capture, backend):
+	if not config.getboolean("rubberstamps", "enabled", fallback=False):
+		return True
+	import cv2
+	import rubberstamps
 
-	if save_failed or save_successful:
-		if len(snapframes) < 3:
-			snapframes.append(frame)
+	send_to_ui("S", "")
+	# Exits the process with the final status
+	rubberstamps.execute(config, ui_proc, {
+		"video_capture": capture,
+		"face_detector": backend.detector,
+		"pose_predictor": getattr(backend, "pose_predictor", None),
+		"clahe": cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)),
+	})
 
-	hist = cv2.calcHist([gsframe], [0], None, [8], [0, 256])
-	hist_total = np.sum(hist)
-	darkness = (hist[0] / hist_total * 100)
 
-	if (hist_total == 0) or (darkness == 100):
-		black_tries += 1
-		continue
+def make_snapshot(kind, stats):
+	summary = stats.as_dict()
+	snapshot.generate(snapframes, [
+		kind + _(" LOGIN"),
+		_("Date: ") + datetime.now(timezone.utc).strftime("%Y/%m/%d %H:%M:%S UTC"),
+		_("Scan time: ") + str(summary["seconds"]) + "s",
+		_("Frames: ") + str(stats.frames) + " (" + str(summary["fps"]) + "FPS)",
+		_("Hostname: ") + os.uname().nodename,
+		_("Best certainty value: ") + str(summary["best_certainty"]),
+	])
 
-	dark_running_total += darkness
-	valid_frames += 1
 
-	if dark_threshold_auto:
-		# Adaptive mode: build a baseline from accepted frames, then reject
-		# frames much darker than the baseline (flashing IR emitters produce
-		# near-black frames). The cap at 95 keeps fully unlit frames out even
-		# in very dim rooms where the lit baseline is high.
-		if len(dark_history) >= 5:
-			baseline = sorted(dark_history)[len(dark_history) // 2]
-			if darkness > min(95.0, baseline * 1.25 + 10):
-				dark_tries += 1
-				continue
-		dark_history.append(darkness)
-		if len(dark_history) > 30:
-			dark_history.pop(0)
-	elif (darkness > dark_threshold):
-		dark_tries += 1
-		continue
+def print_report(stats):
+	summary = stats.as_dict()
+	print(_("Time spent"))
+	print(_("  Starting up and opening the camera: %dms") % round((time.time() - started - stats.elapsed) * 1000))
+	print(_("  Searching for known face: %dms") % round(stats.elapsed * 1000))
+	print(_("\nResolution"))
+	print(_("  Native: %dx%d") % (stats.width, stats.height))
+	print(_("  Used: %dx%d") % (stats.used_width, stats.used_height))
+	print(_("\nFrames searched: %d (%.2f fps)") % (stats.frames, summary["fps"]))
+	print(_("Black frames ignored: %d ") % stats.black)
+	print(_("Dark frames ignored: %d ") % stats.dark)
+	print(_("Certainty of winning frame: %s") % summary["best_certainty"])
 
-	if scaling_factor != 1:
-		frame = cv2.resize(frame, None, fx=scaling_factor, fy=scaling_factor, interpolation=cv2.INTER_AREA)
-		gsframe = cv2.resize(gsframe, None, fx=scaling_factor, fy=scaling_factor, interpolation=cv2.INTER_AREA)
 
-	if rotate == 1:
-		if frames % 3 == 1:
-			frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
-			gsframe = cv2.rotate(gsframe, cv2.ROTATE_90_COUNTERCLOCKWISE)
-		if frames % 3 == 2:
-			frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
-			gsframe = cv2.rotate(gsframe, cv2.ROTATE_90_CLOCKWISE)
-	elif rotate == 2:
-		if frames % 2 == 0:
-			frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
-			gsframe = cv2.rotate(gsframe, cv2.ROTATE_90_COUNTERCLOCKWISE)
-		else:
-			frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
-			gsframe = cv2.rotate(gsframe, cv2.ROTATE_90_CLOCKWISE)
+try:
+	result, stats = engine.verify(
+		encodings,
+		on_progress=progress,
+		keep_frames=snapframes,
+		after_match=rubberstamps_hook,
+	)
+except FileNotFoundError:
+	print(_("Data files have not been downloaded, please run the following commands:"))
+	print("\n\tcd " + paths_factory.dlib_data_dir_path())
+	print("\tsudo ./install.sh\n")
+	sys.exit(1)
 
-	face_locations = backend.detect_faces(gsframe, 1)
+if result == VerificationResult.SUCCESS:
+	if end_report:
+		print_report(stats)
+	if save_successful:
+		make_snapshot(_("SUCCESSFUL"), stats)
+elif result in (VerificationResult.TIMEOUT_REACHED, VerificationResult.TOO_DARK):
+	if save_failed:
+		make_snapshot(_("FAILED"), stats)
+	if result == VerificationResult.TOO_DARK:
+		print(_("All frames were too dark, please check dark_threshold in config"))
+elif result == VerificationResult.INVALID_DEVICE:
+	if config.getboolean("video", "warn_no_device", fallback=True):
+		print(stats.error)
 
-	for fl in face_locations:
-		face_encoding = backend.compute_encoding(frame, fl)
-		if face_encoding is None:
-			continue
-
-		matches = backend.match(encodings, face_encoding)
-
-		match_index = np.argmin(matches)
-		match = matches[match_index]
-
-		if lowest_certainty > match:
-			lowest_certainty = match
-
-		if 0 <= match < video_certainty:
-			timings["tt"] = time.time() - timings["st"]
-			timings["fl"] = time.monotonic() - timings["fr"]
-
-			if end_report:
-				def print_timing(label, k):
-					print("  %s: %dms" % (label, round(timings[k] * 1000)))
-
-				print(_("Time spent"))
-				print_timing(_("Starting up"), "in")
-				print(_("  Open cam + load libs: %dms") % (round(max(timings["ll"], timings["ic"]) * 1000, )))
-				print_timing(_("  Opening the camera"), "ic")
-				print_timing(_("  Importing recognition libs"), "ll")
-				print_timing(_("Searching for known face"), "fl")
-				print_timing(_("Total time"), "tt")
-
-				print(_("\nResolution"))
-				width = video_capture.fw or 1
-				print(_("  Native: %dx%d") % (height, width))
-				scale_height, scale_width = frame.shape[:2]
-				print(_("  Used: %dx%d") % (scale_height, scale_width))
-
-				print(_("\nFrames searched: %d (%.2f fps)") % (frames, frames / timings["fl"]))
-				print(_("Black frames ignored: %d ") % (black_tries, ))
-				print(_("Dark frames ignored: %d ") % (dark_tries, ))
-				print(_("Certainty of winning frame: %.3f") % (match * 10, ))
-				print(_("Winning model: %d (\"%s\")") % (match_index, models[match_index]["label"]))
-
-			if save_successful:
-				make_snapshot(_("SUCCESSFUL"))
-
-			if config.getboolean("rubberstamps", "enabled", fallback=False):
-				import rubberstamps
-
-				send_to_ui("S", "")
-
-				if "ui_proc" not in vars():
-					ui_proc = None
-
-				rubberstamps.execute(config, ui_proc, {
-					"video_capture": video_capture,
-					"face_detector": backend.detector,
-					"pose_predictor": getattr(backend, "pose_predictor", None),
-					"clahe": clahe
-				})
-
-			exit(0)
-
-	if exposure != -1:
-		video_capture.internal.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1.0)
-		video_capture.internal.set(cv2.CAP_PROP_EXPOSURE, float(exposure))
+sys.exit(int(result))

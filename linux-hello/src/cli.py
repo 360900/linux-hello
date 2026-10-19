@@ -111,25 +111,32 @@ if args.user == "root":
 	sys.exit(1)
 
 # Execute the right command
-if args.command == "add":
-	import cli.add
-elif args.command == "clear":
-	import cli.clear
-elif args.command == "config":
-	import cli.config
-elif args.command == "disable":
-	import cli.disable
-elif args.command == "list":
-	import cli.list
-elif args.command == "remove":
-	import cli.remove
-elif args.command == "set":
-	import cli.set
-elif args.command == "snapshot":
-	import cli.snap
-elif args.command == "test":
-	import cli.test
-elif args.command == "webauthn":
-	import cli.webauthn
-else:
-	print("Linux Hello 3.0.0 BETA")
+from recorders.errors import CameraError
+
+try:
+	if args.command == "add":
+		import cli.add
+	elif args.command == "clear":
+		import cli.clear
+	elif args.command == "config":
+		import cli.config
+	elif args.command == "disable":
+		import cli.disable
+	elif args.command == "list":
+		import cli.list
+	elif args.command == "remove":
+		import cli.remove
+	elif args.command == "set":
+		import cli.set
+	elif args.command == "snapshot":
+		import cli.snap
+	elif args.command == "test":
+		import cli.test
+	elif args.command == "webauthn":
+		import cli.webauthn
+	else:
+		print("Linux Hello 3.0.0 BETA")
+except CameraError as error:
+	print(error)
+	sys.exit(14)
+

@@ -5,9 +5,9 @@
 import configparser
 import cv2
 import os
-import sys
 
 from i18n import _
+from recorders.errors import CameraError
 
 # Class to provide boilerplate code to build a video recorder with the
 # correct settings from the config file.
@@ -40,19 +40,12 @@ class VideoCapture:
 				from device_discovery import autodetect_device
 			device_path = autodetect_device()
 			if device_path is None:
-				print(_("No usable camera was found automatically."))
-				print(_("Connect a camera or set 'device_path' in the config file by running:"))
-				print("\n\tsudo linux-hello-cli config\n")
-				sys.exit(14)
+				raise CameraError(_("No usable camera was found automatically. Connect a camera or set 'device_path' with: linux-hello-cli set device_path <path>"))
 			# Persist the choice so the same camera is used next time
 			self.config.set("video", "device_path", device_path)
 		self.resolved_device_path = device_path
 		if not os.path.exists(device_path):
-			if self.config.getboolean("video", "warn_no_device", fallback=True):
-				print(_("Linux Hello could not find a camera device at the path specified in the config file."))
-				print(_("It is very likely that the path is not configured correctly, please edit the 'device_path' config value by running:"))
-				print("\n\tsudo linux-hello-cli config\n")
-			sys.exit(14)
+			raise CameraError(_("No camera at {path}. Set 'device_path' to \"none\" to pick one automatically: linux-hello-cli set device_path none").format(path=device_path))
 
 		# Create reader
 		# The internal video recorder
@@ -97,8 +90,7 @@ class VideoCapture:
 		# Don't remove ret, it doesn't work without it
 		ret, frame = self.internal.read()
 		if not ret:
-			print(_("Failed to read camera specified in the 'device_path' config option, aborting"))
-			sys.exit(14)
+			raise CameraError(_("Failed to read a frame from {path}").format(path=self.resolved_device_path))
 
 		try:
 			# Convert from color to grayscale
