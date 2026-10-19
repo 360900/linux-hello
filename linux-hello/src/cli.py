@@ -273,6 +273,30 @@ def cmd_enable(client, args, enabled=True):
 			client.call("SetTarget", "sb", [target, enabled])
 	finally:
 		client.stop_tty_agent()
+	if "lock-screen" in args.arguments:
+		lock_screen_choice(client, enabled)
+
+
+def lock_screen_choice(client, enabled):
+	"""
+	Plasma 6.8+ starts its lock screen with the sign-in option that last
+	unlocked it. Make face yours right away, in your own state file, and
+	hand the choice back to the password when face unlock is turned off.
+	"""
+	if os.geteuid() == 0:
+		return
+	targets = {t[0]: t for t in client.call("ListTargets")[0]}
+	if "kde-face" not in targets.get("lock-screen", [None] * 6)[5]:
+		return
+	from integration import kscreenlocker
+	try:
+		if enabled:
+			kscreenlocker.prefer_face()
+			print(_("The lock screen now starts with face unlock. Your password stays one click away."))
+		else:
+			kscreenlocker.stop_preferring_face()
+	except OSError as error:
+		print(_("Could not update your lock screen choice: {}").format(error))
 
 
 def cmd_disable(client, args):

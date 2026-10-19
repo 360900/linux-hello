@@ -44,6 +44,7 @@ py_sources = [
     'openvino_face.py',
     'i18n.py',
     'integration/__init__.py',
+    'integration/kscreenlocker.py',
     'integration/pam.py',
     'models.py',
     'settings.py',

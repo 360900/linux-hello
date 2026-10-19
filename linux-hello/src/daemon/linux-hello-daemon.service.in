@@ -12,6 +12,8 @@ ExecStart=@daemon_path@
 # ProtectSystem=strict makes their parents read-only.
 @writable_dirs@
 ReadWritePaths=/etc/pam.d
+# kscreenlockerrc, which turns on face unlock on the Plasma lock screen
+ReadWritePaths=-/etc/xdg
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes

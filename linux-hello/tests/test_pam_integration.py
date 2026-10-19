@@ -291,3 +291,72 @@ def test_state_file_is_private(tmp_path):
 	root = tree("arch", tmp_path)
 	PamIntegration(root).enable("sudo")
 	assert os.stat(os.path.join(root, pam.STATE_FILE)).st_mode & 0o777 == 0o600
+
+
+# -- kscreenlocker configuration -------------------------------------------------
+def test_lock_screen_enables_face_in_kscreenlocker(tmp_path):
+	root = tree("arch", tmp_path)
+	integration = PamIntegration(root)
+	integration.enable("lock-screen")
+
+	text = read(root, pam.KSCREENLOCKER_CONFIG)
+	assert "[Authenticators]\nFace=true\n" in text
+	assert {t["id"]: t["enabled"] for t in integration.targets()}["lock-screen"]
+
+	# Without the setting the lock screen never offers face unlock
+	os.unlink(os.path.join(root, pam.KSCREENLOCKER_CONFIG))
+	assert not {t["id"]: t["enabled"] for t in integration.targets()}["lock-screen"]
+
+
+@pytest.mark.parametrize("existing", [
+	"[Greeter]\nTheme=breeze\n",
+	"[Greeter]\nTheme=breeze",
+	"[Greeter]\nTheme=breeze\n\n",
+])
+def test_existing_kscreenlocker_config_round_trip(tmp_path, existing):
+	root = tree("arch", tmp_path)
+	path = os.path.join(root, pam.KSCREENLOCKER_CONFIG)
+	os.makedirs(os.path.dirname(path))
+	with open(path, "w") as file:
+		file.write(existing)
+
+	integration = PamIntegration(root)
+	integration.enable("lock-screen")
+	text = read(root, pam.KSCREENLOCKER_CONFIG)
+	assert text.startswith("[Greeter]\nTheme=breeze")
+	assert text.endswith("[Authenticators]\nFace=true\n" + pam.END + "\n")
+
+	integration.disable("lock-screen")
+	assert read(root, pam.KSCREENLOCKER_CONFIG) == existing
+
+
+def test_created_config_keeps_admin_additions(tmp_path):
+	root = tree("arch", tmp_path)
+	integration = PamIntegration(root)
+	integration.enable("lock-screen")
+	with open(os.path.join(root, pam.KSCREENLOCKER_CONFIG), "a") as file:
+		file.write("[Daemon]\nTimeout=10\n")
+
+	integration.disable("lock-screen")
+	assert read(root, pam.KSCREENLOCKER_CONFIG) == "[Daemon]\nTimeout=10\n"
+
+
+def test_old_plasma_does_not_touch_kscreenlocker(tmp_path):
+	root = tree("debian", tmp_path)
+	PamIntegration(root).enable("lock-screen")
+	assert not os.path.exists(os.path.join(root, pam.KSCREENLOCKER_CONFIG))
+
+
+def test_reset_without_manifest_removes_config_block(tmp_path):
+	root = tree("arch", tmp_path)
+	path = os.path.join(root, pam.KSCREENLOCKER_CONFIG)
+	os.makedirs(os.path.dirname(path))
+	with open(path, "w") as file:
+		file.write("[Greeter]\nTheme=breeze\n")
+	integration = PamIntegration(root)
+	integration.enable("lock-screen")
+	os.unlink(os.path.join(root, pam.STATE_FILE))
+
+	integration.reset()
+	assert pam.BEGIN not in read(root, pam.KSCREENLOCKER_CONFIG)
+	assert read(root, pam.KSCREENLOCKER_CONFIG).startswith("[Greeter]\nTheme=breeze\n")

@@ -37,6 +37,11 @@ OWN_STACK_LINE = "auth\t[success=ok default=die]\t" + MODULE + " no_password"
 OWN_HEADER = "#%PAM-1.0\n# Created by linux-hello"
 
 ETC_DIR = "etc/pam.d"
+
+# Plasma 6.8+ only offers face unlock on the lock screen when this is set;
+# /etc/xdg is the system-wide default users can still override
+KSCREENLOCKER_CONFIG = "etc/xdg/kscreenlockerrc"
+KSCREENLOCKER_BLOCK = [BEGIN, "[Authenticators]", "Face=true", END]
 VENDOR_DIRS = ("usr/lib/pam.d", "usr/etc/pam.d")
 STATE_FILE = "var/lib/linux-hello/pam-state.json"
 
@@ -305,7 +310,7 @@ class PamIntegration:
 		"""
 		if target == "lock-screen":
 			if self._kde_face_supported() and (self._find("kde-fingerprint") or self._find("kde")):
-				return [("kde-face", "own")]
+				return [("kde-face", "own"), ("kscreenlockerrc", "kde-config")]
 			return [("kde", "insert")] if self._find("kde") else []
 		if target == "admin":
 			return [("polkit-1", "insert")] if self._find("polkit-1") else []
@@ -336,6 +341,9 @@ class PamIntegration:
 		return False
 
 	def _service_enabled(self, service, kind):
+		if kind == "kde-config":
+			path = self._path(KSCREENLOCKER_CONFIG)
+			return os.path.isfile(path) and has_block(self._read(path))
 		path = self._etc(service)
 		if not os.path.isfile(path):
 			return False
@@ -352,7 +360,7 @@ class PamIntegration:
 			plan = self._plan(target["id"])
 			entry = dict(target)
 			entry["available"] = bool(plan)
-			entry["services"] = [service for service, _ in plan]
+			entry["services"] = [service for service, kind in plan if kind != "kde-config"]
 			entry["enabled"] = bool(plan) and all(self._service_enabled(s, k) for s, k in plan)
 			result.append(entry)
 		return result
@@ -365,6 +373,8 @@ class PamIntegration:
 		for service, kind in plan:
 			if kind == "own":
 				self._enable_own(service, target, state)
+			elif kind == "kde-config":
+				self._enable_kde_config(target, state)
 			else:
 				self._enable_insert(service, target, state)
 		self._save_state(state)
@@ -372,7 +382,8 @@ class PamIntegration:
 	def disable(self, target):
 		state = self._load_state()
 		for service, kind in self._plan(target):
-			self._revert(self._etc(service), state)
+			path = self._path(KSCREENLOCKER_CONFIG) if kind == "kde-config" else self._etc(service)
+			self._revert(path, state)
 		self._save_state(state)
 
 	def reset(self):
@@ -411,6 +422,18 @@ class PamIntegration:
 				if cleaned != text:
 					self._write(path, cleaned)
 					changed.append(path)
+
+		# A block whose manifest entry was lost
+		config = self._path(KSCREENLOCKER_CONFIG)
+		if os.path.isfile(config):
+			text = self._read(config)
+			if has_block(text):
+				cleaned = remove_block(text)
+				if cleaned.strip():
+					self._write(config, cleaned)
+				else:
+					self._remove(config)
+				changed.append(config)
 
 		self._save_state(state)
 		return changed
@@ -453,6 +476,28 @@ class PamIntegration:
 			"sha256": _sha256(text),
 		}
 
+	def _enable_kde_config(self, target, state):
+		path = self._path(KSCREENLOCKER_CONFIG)
+		block = "\n".join(KSCREENLOCKER_BLOCK) + "\n"
+		if os.path.isfile(path):
+			text = self._read(path)
+			if has_block(text):
+				return
+			separator = "" if not text or text.endswith("\n\n") else ("\n" if text.endswith("\n") else "\n\n")
+			new_text = text + separator + block
+			action = "inserted"
+		else:
+			new_text = block
+			action = "created"
+		self._write(path, new_text)
+		state["files"][path] = {
+			"action": action,
+			"target": target,
+			"sha256": _sha256(new_text),
+		}
+		if action == "inserted":
+			state["files"][path]["separator"] = separator
+
 	def _revert(self, path, state):
 		"""Undo our change to one file. Returns True when the file changed."""
 		entry = state["files"].pop(path, None)
@@ -464,12 +509,24 @@ class PamIntegration:
 		if text.startswith(OWN_HEADER):
 			self._remove(path)
 			return True
-		if entry is not None and entry.get("action") == "created":
-			return False
 
 		cleaned = remove_block(text)
+		if entry is not None and entry.get("action") == "created":
+			# Ours to delete, unless someone added their own settings to it
+			if untouched or not cleaned.strip():
+				self._remove(path)
+				return True
+			if cleaned != text:
+				self._write(path, cleaned)
+				return True
+			return False
+
 		if cleaned == text:
 			return False
+		separator = (entry or {}).get("separator", "")
+		if separator and cleaned.endswith(separator):
+			# The blank line written in front of our block
+			cleaned = cleaned[:-len(separator)]
 		if entry is not None and entry.get("action") == "copied" and untouched:
 			# Nobody edited our copy: drop it so the vendor file applies again
 			self._remove(path)
