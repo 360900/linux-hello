@@ -176,6 +176,8 @@ if [ "${NO_STRIP:-0}" != "1" ]; then
 fi
 
 rm -rf "$SITE/pip" "$SITE"/pip-*.dist-info
+# Console scripts and install records point into the build tree; unused
+rm -rf "$SITE/bin" "$SITE"/*.dist-info/direct_url.json
 
 # ---------------------------------------------------------------------------
 # 4. Smoke test the assembled runtime

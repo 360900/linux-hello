@@ -153,6 +153,6 @@ package() {
 	install -Dm644 linux-hello/NOTICE "$pkgdir/usr/share/licenses/$pkgname/NOTICE"
 
 	# Bytecode for the paths it runs from, so nothing is written there later
-	"$pkgdir/usr/lib/linux-hello-runtime/python/bin/python3" -m compileall -q -j0 \
+	"$pkgdir/usr/lib/linux-hello-runtime/python/bin/python3" -B -m compileall -f -q -j0 \
 		-s "$pkgdir" -p / "$pkgdir/usr/lib/linux-hello-runtime" "$pkgdir/usr/lib/linux-hello"
 }
