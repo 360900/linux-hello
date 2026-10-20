@@ -854,6 +854,7 @@ class v4l2_bt_timings(ctypes.Structure):
     ]
 
     _pack_ = True
+    _layout_ = 'ms'
 
 # Interlaced or progressive format
 V4L2_DV_PROGRESSIVE = 0
@@ -878,6 +879,7 @@ class v4l2_dv_timings(ctypes.Structure):
 
     _anonymous_ = ('_u',)
     _pack_ = True
+    _layout_ = 'ms'
 
 
 # Values for the type field
@@ -977,6 +979,7 @@ class v4l2_ext_control(ctypes.Structure):
 
     _anonymous_ = ('_u',)
     _pack_ = True
+    _layout_ = 'ms'
 
 
 class v4l2_ext_controls(ctypes.Structure):
@@ -1525,6 +1528,7 @@ class v4l2_rds_data(ctypes.Structure):
     ]
 
     _pack_ = True
+    _layout_ = 'ms'
 
 
 V4L2_RDS_BLOCK_MSK =  0x7
@@ -1705,6 +1709,7 @@ class v4l2_mpeg_vbi_itv0_line(ctypes.Structure):
     ]
 
     _pack_ = True
+    _layout_ = 'ms'
 
 
 class v4l2_mpeg_vbi_itv0(ctypes.Structure):
@@ -1714,6 +1719,7 @@ class v4l2_mpeg_vbi_itv0(ctypes.Structure):
     ]
 
     _pack_ = True
+    _layout_ = 'ms'
 
 
 class v4l2_mpeg_vbi_ITV0(ctypes.Structure):
@@ -1722,6 +1728,7 @@ class v4l2_mpeg_vbi_ITV0(ctypes.Structure):
     ]
 
     _pack_ = True
+    _layout_ = 'ms'
 
 
 V4L2_MPEG_VBI_IVTV_MAGIC0 = "itv0"
@@ -1742,6 +1749,7 @@ class v4l2_mpeg_vbi_fmt_ivtv(ctypes.Structure):
 
     _anonymous_ = ('_u',)
     _pack_ = True
+    _layout_ = 'ms'
 
 
 #
@@ -1802,6 +1810,7 @@ class v4l2_dbg_match(ctypes.Structure):
 
     _anonymous_ = ('_u',)
     _pack_ = True
+    _layout_ = 'ms'
 
 
 class v4l2_dbg_register(ctypes.Structure):
@@ -1813,6 +1822,7 @@ class v4l2_dbg_register(ctypes.Structure):
     ]
 
     _pack_ = True
+    _layout_ = 'ms'
 
 
 class v4l2_dbg_chip_ident(ctypes.Structure):
@@ -1823,6 +1833,7 @@ class v4l2_dbg_chip_ident(ctypes.Structure):
     ]
 
     _pack_ = True
+    _layout_ = 'ms'
 
 
 #
