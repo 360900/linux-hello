@@ -27,12 +27,18 @@ def models_unreadable():
 	return False
 
 
-pytestmark = [
-	pytest.mark.skipif(not os.path.isfile(MODULE), reason="PAM module not built"),
-	pytest.mark.skipif(not os.path.isfile(VENDOR_CONFIG), reason="config defaults not installed"),
-	pytest.mark.skipif(not models_unreadable(), reason="needs a root-only models directory"),
-	pytest.mark.skipif(not shutil.which("cc"), reason="no C compiler"),
-]
+MISSING = [reason for missing, reason in (
+	(not os.path.isfile(MODULE), "PAM module not built"),
+	(not os.path.isfile(VENDOR_CONFIG), "config defaults not installed"),
+	(not models_unreadable(), "needs a root-only models directory"),
+	(not shutil.which("cc"), "no C compiler"),
+) if missing]
+
+# CI sets this: these tests guard against lockouts and must not skip there
+if MISSING and os.environ.get("LINUX_HELLO_REQUIRE_PAM_TESTS") == "1":
+	raise RuntimeError("PAM module tests cannot run: " + ", ".join(MISSING))
+
+pytestmark = pytest.mark.skipif(bool(MISSING), reason=", ".join(MISSING))
 
 
 @pytest.fixture(scope="module")

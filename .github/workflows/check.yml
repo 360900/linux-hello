@@ -17,12 +17,22 @@ jobs:
 
       - name: Build
         run: |
-          meson setup build
+          meson setup build --prefix=/usr
           ninja -C build
+
+      # The PAM module tests need the installed defaults and a models
+      # directory only root can read, as on a real install
+      - name: Prepare PAM module tests
+        run: |
+          sudo install -Dm644 linux-hello/src/config.ini /usr/share/linux-hello/config.ini
+          sudo install -dm700 /var/lib/linux-hello/models
 
       - name: Tests
         working-directory: linux-hello
-        run: ../venv/bin/python -m pytest -q
+        env:
+          LINUX_HELLO_PAM_MODULE: ${{ github.workspace }}/build/linux-hello/src/pam/pam_linux_hello.so
+          LINUX_HELLO_REQUIRE_PAM_TESTS: "1"
+        run: ../venv/bin/python -m pytest -q -rs
 
       - name: Packaging sources match the manifest
         run: python3 tools/update_packaging.py --check
