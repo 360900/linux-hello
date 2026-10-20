@@ -58,7 +58,7 @@ def _rp_id_hash(rp_id):
 
 def _verification_error(result):
 	"""Map a failed VerificationResult to the CTAP error to return"""
-	if result == VerificationResult.TIMEOUT_REACHED:
+	if result in (VerificationResult.TIMEOUT_REACHED, VerificationResult.NOT_CONFIRMED):
 		return CtapError(ERR.USER_ACTION_TIMEOUT)
 	if result == VerificationResult.CANCELLED:
 		return CtapError(ERR.KEEPALIVE_CANCEL)

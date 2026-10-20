@@ -1,8 +1,10 @@
 # Internal face verification API
 # Based on PR #1125 by qilsklo (https://github.com/boltgolt/howdy/pull/1125)
 # Asks the Linux Hello service (io.github.LinuxHello1) to verify a face
-# with VerifyNow: the same scan the PAM module gets, but a passkey prompt is
-# started by the user, so the lock screen's pause never applies.
+# with VerifyNow: the same scan the PAM module gets, but started by the
+# user, so the lock screen's pause never applies. Passkeys use
+# VerifyConfirmed instead: any program can ask the virtual security key for
+# a sign-in, so the scan waits for Enter like sudo does.
 
 import asyncio
 import enum
@@ -19,7 +21,7 @@ class VerificationResult(enum.IntEnum):
 	INVALID_DEVICE = 14
 	RUBBERSTAMP = 15
 	# VerifyConfirmed: no Enter in time or typing, of which 3 within a
-	# minute pause face for a minute; then paused; or skipped with Esc
+	# minute pause face for a while; then paused; or skipped with Esc
 	NOT_CONFIRMED = 16
 	CONFIRM_PAUSED = 17
 	SKIPPED = 18
@@ -54,11 +56,12 @@ class FaceVerifier:
 		self._lock = threading.Lock()
 		self._running = None
 
-	def verify(self, user, timeout=None):
+	def verify(self, user, timeout=None, confirmed=False):
 		"""Verify the face of the given user, blocking until a result is known
 
 		timeout is a hard deadline in seconds on top of the scan timeout the
-		service applies from [video] timeout in the config.
+		service applies from [video] timeout in the config. confirmed waits
+		for Enter on a physical keyboard first (root callers only).
 		"""
 		if not user or user == "root":
 			return VerificationResult.ABORT
@@ -71,13 +74,13 @@ class FaceVerifier:
 			state = self._running
 
 		try:
-			return loop.run_until_complete(self._verify(user, timeout, state))
+			return loop.run_until_complete(self._verify(user, timeout, state, confirmed))
 		finally:
 			loop.close()
 			with self._lock:
 				self._running = None
 
-	async def _verify(self, user, timeout, state):
+	async def _verify(self, user, timeout, state, confirmed):
 		from dbus_fast import BusType, Message, MessageType
 		from dbus_fast.aio import MessageBus
 
@@ -98,7 +101,7 @@ class FaceVerifier:
 				destination=self.BUS_NAME,
 				path=self.OBJECT_PATH,
 				interface=self.INTERFACE,
-				member="VerifyNow",
+				member="VerifyConfirmed" if confirmed else "VerifyNow",
 				signature="s",
 				body=[user],
 			)), timeout)
@@ -133,14 +136,18 @@ class FaceVerifier:
 
 
 class BoundVerifier:
-	"""A FaceVerifier fixed to one user, the interface the authenticator expects"""
+	"""
+	A FaceVerifier fixed to one user, the interface the authenticator
+	expects. Confirmed with Enter, as a sign-in with a passkey can be asked
+	for by any program.
+	"""
 
 	def __init__(self, user, bus_address=None):
 		self.user = user
 		self._verifier = FaceVerifier(bus_address=bus_address)
 
 	def verify(self, timeout=None):
-		return self._verifier.verify(self.user, timeout=timeout)
+		return self._verifier.verify(self.user, timeout=timeout, confirmed=True)
 
 	def cancel(self):
 		self._verifier.cancel()

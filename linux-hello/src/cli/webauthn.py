@@ -158,7 +158,7 @@ def cmd_register():
 	authenticator = make_authenticator(state)
 
 	print(_("Testing credential creation against a local fake website"))
-	print(_("Look at the camera to confirm with your face"))
+	print(_("Press Enter, then look at the camera to confirm with your face"))
 
 	from fido2.ctap import CtapError
 	try:
@@ -183,7 +183,7 @@ def cmd_authenticate():
 	authenticator = make_authenticator(state)
 
 	print(_("Testing authentication against a local fake website"))
-	print(_("Look at the camera to confirm with your face"))
+	print(_("Press Enter, then look at the camera to confirm with your face"))
 
 	from fido2 import cbor
 	from fido2.cose import CoseKey

@@ -171,9 +171,15 @@ Once the service is running, go to any passkey demo or a real site's
 <https://webauthn.io>.
 
 1. Choose to register a **passkey** / **security key**.
-2. When the browser prompts for your security key, **look at your camera**.
+2. When the browser prompts for your security key, **press Enter** within
+   3 seconds, then **look at your camera**.
 3. Linux Hello verifies your face; the credential is created and stored.
-4. To log in, repeat: the browser prompts, you look at the camera, done.
+4. To log in, repeat: the browser prompts, you press Enter and look at the
+   camera, done.
+
+Enter has to come from this computer's keyboard. Any program can ask the
+security key for a sign-in, and a face only shows that you are there, not
+that you want it.
 
 If the browser shows a PIN prompt instead of proceeding, it did not route to
 the virtual device, see [Troubleshooting](#troubleshooting).
@@ -275,8 +281,8 @@ embeddings, and authentication secrets are **never** written to logs.
 - **Root can impersonate the authenticator.** The daemon runs as root and,
   with the software keystore, root can also read the keys. This is a
   single-user convenience feature, not a defence against a compromised host.
-- **No user-presence hardware button.** "User presence" is satisfied by the
-  face check rather than a physical touch.
+- **No user-presence hardware button.** Enter on a physical keyboard stands
+  in for the touch, then the face check verifies the user.
 
 ### Honest classification
 

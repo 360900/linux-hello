@@ -251,6 +251,30 @@ def test_webauthn_verifier_uses_the_service(service):
 	assert verifier.verify("root") == VerificationResult.ABORT
 
 
+@pytest.mark.as_root
+def test_passkeys_need_enter(service):
+	# Any program can ask the virtual security key for a sign-in
+	import models as model_store
+	from verification import BoundVerifier, VerificationResult
+
+	cli, _allowed, _root = service
+	model_store.add(ME, "office", [[0.5, 0.5]], 1)
+	verifier = BoundVerifier(ME, bus_address=cli.private_bus)
+	cli.managers[0].confirm = lambda cancel: "nothing"
+	assert verifier.verify(timeout=20) == VerificationResult.NOT_CONFIRMED
+	cli.managers[0].confirm = lambda cancel: "enter"
+	assert verifier.verify(timeout=20) == VerificationResult.SUCCESS
+
+
+def test_passkey_without_enter_is_a_timeout_for_the_browser():
+	pytest.importorskip("fido2")
+	from fido2.ctap import CtapError
+	from verification import VerificationResult
+	from webauthn.authenticator import _verification_error
+
+	assert _verification_error(VerificationResult.NOT_CONFIRMED).code == CtapError.ERR.USER_ACTION_TIMEOUT
+
+
 def test_webauthn_verifier_without_service(private_bus):  # noqa: F811
 	from verification import FaceVerifier, VerificationResult
 
