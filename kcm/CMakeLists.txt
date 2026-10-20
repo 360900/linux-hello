@@ -5,7 +5,8 @@ cmake_minimum_required(VERSION 3.22)
 file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/../VERSION LINUX_HELLO_VERSION LIMIT_COUNT 1)
 project(kcm_linuxhello VERSION ${LINUX_HELLO_VERSION} LANGUAGES CXX)
 
-set(QT_MIN_VERSION 6.7.0)
+# 6.8: Image.retainWhileLoading for the camera picture
+set(QT_MIN_VERSION 6.8.0)
 set(KF_MIN_VERSION 6.0.0)
 
 find_package(ECM ${KF_MIN_VERSION} REQUIRED NO_MODULE)

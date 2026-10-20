@@ -37,4 +37,16 @@
       <allow_active>auth_admin_keep</allow_active>
     </defaults>
   </action>
+
+  <!-- Seeing the camera picture while testing: only at the computer, never
+       over SSH -->
+  <action id="io.github.linuxhello.preview">
+    <description>See the camera picture while testing face authentication</description>
+    <message>Authentication is required to see the camera picture</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
 </policyconfig>

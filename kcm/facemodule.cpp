@@ -49,6 +49,7 @@ FaceModule::FaceModule(QObject *parent, const KPluginMetaData &data)
 
     auto bus = QDBusConnection::systemBus();
     bus.connect(SERVICE, PATH, INTERFACE, QStringLiteral("EnrollProgress"), this, SLOT(onEnrollProgress(QString, QVariantMap)));
+    bus.connect(SERVICE, PATH, INTERFACE, QStringLiteral("Preview"), this, SLOT(onPreview(QString, QByteArray)));
     bus.connect(SERVICE, PATH, INTERFACE, QStringLiteral("ModelsChanged"), this, SLOT(onModelsChanged(QString)));
     bus.connect(SERVICE, PATH, INTERFACE, QStringLiteral("TargetsChanged"), this, SLOT(loadTargets()));
     bus.connect(SERVICE, PATH, INTERFACE, QStringLiteral("SettingsChanged"), this, SLOT(loadSettings()));
@@ -124,6 +125,11 @@ int FaceModule::enrollSamples() const
 QRectF FaceModule::enrollFace() const
 {
     return m_enrollFace;
+}
+
+QString FaceModule::preview() const
+{
+    return m_preview;
 }
 
 // -- calls ------------------------------------------------------------------
@@ -258,13 +264,12 @@ void FaceModule::enroll(const QString &label)
     if (m_scanning) {
         return;
     }
-    m_scanning = true;
     m_enrollState.clear();
     m_enrollSample = 0;
     m_enrollSamples = 0;
     m_enrollFace = QRectF();
-    Q_EMIT scanningChanged();
     Q_EMIT enrollProgress();
+    startScan();
 
     call(QStringLiteral("Enroll"), {user(), label}, INTERACTIVE, [this](const QDBusMessage &reply) {
         finishScan();
@@ -287,8 +292,7 @@ void FaceModule::verify()
     if (m_scanning) {
         return;
     }
-    m_scanning = true;
-    Q_EMIT scanningChanged();
+    startScan();
     call(QStringLiteral("VerifyNow"), {user()}, INTERACTIVE, [this](const QDBusMessage &reply) {
         finishScan();
         Q_EMIT verifyFinished(reply.arguments().value(0).toInt(), reply.arguments().value(1).toDouble());
@@ -304,6 +308,15 @@ void FaceModule::cancel()
     if (m_scanning) {
         call(QStringLiteral("Cancel"), {}, QUICK, {}, {});
     }
+}
+
+void FaceModule::startScan()
+{
+    m_scanning = true;
+    // Not the last picture of the previous scan
+    m_preview.clear();
+    Q_EMIT scanningChanged();
+    Q_EMIT previewChanged();
 }
 
 void FaceModule::finishScan()
@@ -326,6 +339,15 @@ void FaceModule::onEnrollProgress(const QString &user, const QVariantMap &update
     m_enrollSamples = values.value(QStringLiteral("samples")).toInt();
     m_enrollFace = faceRect(values.value(QStringLiteral("face")));
     Q_EMIT enrollProgress();
+}
+
+void FaceModule::onPreview(const QString &user, const QByteArray &jpeg)
+{
+    if (!m_scanning || user != this->user()) {
+        return;
+    }
+    m_preview = QStringLiteral("data:image/jpeg;base64,") + QString::fromLatin1(jpeg.toBase64());
+    Q_EMIT previewChanged();
 }
 
 // -- changes ----------------------------------------------------------------

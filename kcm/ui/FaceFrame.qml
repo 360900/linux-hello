@@ -1,4 +1,4 @@
-// Where the camera sees the face, drawn like a mirror, while enrolling
+// What the camera sees and where it finds the face, drawn like a mirror
 
 import QtQuick
 
@@ -11,15 +11,32 @@ Rectangle {
     property rect face
     // The face is being captured
     property bool good: false
+    // The camera picture (a URL); empty until the camera runs
+    property string preview
 
     readonly property bool hasFace: face.width > 0 && face.height > 0
+    readonly property bool hasPicture: preview !== "" && picture.sourceSize.width > 0
 
-    implicitHeight: width * 3 / 4
+    // The picture's shape, so face boxes land where they belong
+    implicitHeight: picture.sourceSize.width > 0 ? width * picture.sourceSize.height / picture.sourceSize.width : width * 3 / 4
     radius: Kirigami.Units.cornerRadius
     color: Kirigami.Theme.alternateBackgroundColor
     border.color: Kirigami.Theme.disabledTextColor
     border.width: 1
     clip: true
+
+    Image {
+        id: picture
+        anchors.fill: parent
+        anchors.margins: frame.border.width
+        visible: frame.preview !== ""
+        source: frame.preview
+        cache: false
+        // Keeps the last frame up while the next one decodes
+        retainWhileLoading: true
+        mirror: true
+        smooth: true
+    }
 
     // Where the face should be
     Rectangle {
@@ -38,7 +55,7 @@ Rectangle {
         width: Kirigami.Units.iconSizes.large
         height: width
         source: "linux-hello-symbolic"
-        visible: !frame.hasFace
+        visible: !frame.hasFace && !frame.hasPicture
         opacity: 0.5
     }
 

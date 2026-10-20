@@ -16,6 +16,7 @@ log = logging.getLogger("linux-hello.access")
 ACTION_ENROLL_SELF = "io.github.linuxhello.enroll-self"
 ACTION_MANAGE_USERS = "io.github.linuxhello.manage-users"
 ACTION_CONFIGURE = "io.github.linuxhello.configure"
+ACTION_PREVIEW = "io.github.linuxhello.preview"
 
 # CheckAuthorization flag AllowUserInteraction
 ALLOW_INTERACTION = 1

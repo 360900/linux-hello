@@ -20,7 +20,7 @@ FIXTURES = os.path.join(os.path.dirname(__file__), "fixtures")
 class WaitingEngine(FakeEngine):
 	"""Enrolment that only ends when it is cancelled"""
 
-	def enroll(self, samples, timeout, on_progress, cancelled, enrolled_dims):
+	def enroll(self, samples, timeout, on_progress, cancelled, enrolled_dims, on_frame=None):
 		import time
 		from verification import VerificationResult
 

@@ -3,7 +3,8 @@
 # The engine owns the frame loop: dark frame rejection, scaling, rotation,
 # detection, encoding and matching. Callers pass encodings in and get a
 # result plus statistics back, and can follow along with a progress
-# callback (used for live hints during enrolment) and cancel at any time.
+# callback (used for live hints during enrolment), watch the frames it
+# looks at and cancel at any time.
 
 import threading
 import time
@@ -265,10 +266,12 @@ class Engine:
 
 	# -- verification ------------------------------------------------------
 	def verify(self, encodings, timeout=None, on_progress=None, cancelled=None,
-			keep_frames=None, after_match=None, capture=None):
+			keep_frames=None, after_match=None, capture=None, on_frame=None):
 		"""
 		Look for a face matching one of encodings until timeout seconds
 		pass. Returns (VerificationResult, Stats).
+
+		on_frame(gsframe) gets every frame the detector looks at.
 
 		after_match(capture, backend) runs with the camera still open after
 		a match and may veto it by returning False (rubberstamps).
@@ -305,6 +308,8 @@ class Engine:
 					on_progress({"frames": stats.frames, "dark_frames": stats.dark})
 				if frame is None:
 					continue
+				if on_frame is not None:
+					on_frame(gsframe)
 
 				for location in backend.detect_faces(gsframe, 1):
 					encoding = backend.compute_encoding(frame, location)
@@ -332,7 +337,7 @@ class Engine:
 
 	# -- enrolment ---------------------------------------------------------
 	def enroll(self, samples=DEFAULT_SAMPLES, timeout=20.0, on_progress=None,
-			cancelled=None, enrolled_dims=None, capture=None):
+			cancelled=None, enrolled_dims=None, capture=None, on_frame=None):
 		"""
 		Capture samples encodings of a single face. Between samples the
 		engine waits a moment so they differ a little (blinks, small head
@@ -341,7 +346,8 @@ class Engine:
 		on_progress gets {"state", "sample", "samples", "face", "darkness"}
 		where state is one of: searching, no-face, multiple-faces,
 		too-far, too-dark, captured. face is [left, top, right, bottom]
-		relative to the frame (0..1) or None.
+		relative to the frame (0..1) or None. on_frame(gsframe) gets each
+		frame before its progress report.
 
 		Returns (VerificationResult, encodings, Stats). TIMEOUT_REACHED
 		and TOO_DARK return the samples captured so far.
@@ -384,6 +390,8 @@ class Engine:
 				if frame is None:
 					report("too-dark", darkness=darkness)
 					continue
+				if on_frame is not None:
+					on_frame(gsframe)
 
 				locations = backend.detect_faces(gsframe, 1)
 				height, width = gsframe.shape[:2]

@@ -9,12 +9,13 @@ import os
 import threading
 import time
 
+import cv2
 from dbus_fast import Variant
 
 import models as model_store
 import paths_factory
 import settings
-from daemon.access import ACTION_CONFIGURE, ACTION_ENROLL_SELF, ACTION_MANAGE_USERS
+from daemon.access import ACTION_CONFIGURE, ACTION_ENROLL_SELF, ACTION_MANAGE_USERS, ACTION_PREVIEW
 from daemon.dispatch import Failed
 from engine import Engine
 from integration.pam import PamError, PamIntegration
@@ -32,6 +33,10 @@ PAUSE_AFTER = 3
 STREAK_SECONDS = 30.0
 # Longest wait per request, below the PAM module's call timeout
 PAUSE_SECONDS = 25.0
+
+# The picture the settings page shows while scanning
+PREVIEW_FPS = 12
+PREVIEW_QUALITY = 70
 
 
 class Manager:
@@ -87,6 +92,22 @@ class Manager:
 		finally:
 			self.running.pop(caller.sender, None)
 
+	def _preview(self, caller, user):
+		"""on_frame callback sending the caller what the camera sees, as JPEG"""
+		loop = asyncio.get_running_loop()
+		last = [float("-inf")]
+
+		def send(gsframe):
+			now = time.monotonic()
+			if now - last[0] < 1 / PREVIEW_FPS:
+				return
+			last[0] = now
+			ok, data = cv2.imencode(".jpg", gsframe, [cv2.IMWRITE_JPEG_QUALITY, PREVIEW_QUALITY])
+			if ok:
+				loop.call_soon_threadsafe(self.emit, "Preview", "say", [user, data.tobytes()], caller.sender)
+
+		return send
+
 	# -- status ----------------------------------------------------------------
 	async def get_status(self, caller):
 		config = settings.load()
@@ -108,7 +129,7 @@ class Manager:
 		}]
 
 	# -- verification ----------------------------------------------------------
-	async def verify(self, caller, user, pausable=True):
+	async def verify(self, caller, user, pausable=True, preview=False):
 		# Root (the PAM module in sudo, polkit, the login screen) or the user
 		# for themselves (the PAM module in the lock screen greeter)
 		if caller.uid != 0 and not self.access.is_self(caller, user):
@@ -131,6 +152,8 @@ class Manager:
 				return [int(result), -1.0]
 			self.failures.pop(user, None)
 
+		on_frame = self._preview(caller, user) if preview else None
+
 		def work(cancel):
 			config = self.engine.config
 			save_failed = config.getboolean("snapshots", "save_failed", fallback=False)
@@ -141,6 +164,7 @@ class Manager:
 				cancelled=cancel.is_set,
 				keep_frames=frames,
 				after_match=lambda capture, backend: _rubberstamps(config, capture, backend),
+				on_frame=on_frame,
 			)
 			if (result == VerificationResult.SUCCESS and save_successful) or (
 					result in (VerificationResult.TIMEOUT_REACHED, VerificationResult.TOO_DARK) and save_failed):
@@ -159,8 +183,10 @@ class Manager:
 
 	async def verify_now(self, caller, user):
 		# Started by the user (a test in the settings page, a passkey prompt):
-		# never waits for input activity and does not count as a failed unlock
-		return await self.verify(caller, user, pausable=False)
+		# never waits for input activity and does not count as a failed unlock.
+		# Only someone at the computer gets to see the camera picture.
+		preview = await self.access.authorized(caller, ACTION_PREVIEW)
+		return await self.verify(caller, user, pausable=False, preview=preview)
 
 	def _streak(self, user):
 		count, last = self.failures.get(user, (0, 0.0))
@@ -207,6 +233,9 @@ class Manager:
 				body["darkness"] = Variant("d", float(update["darkness"]))
 			loop.call_soon_threadsafe(self.emit, "EnrollProgress", "sa{sv}", [user, body], caller.sender)
 
+		# Enrolling needed the caller's password at the computer already
+		on_frame = self._preview(caller, user)
+
 		def work(cancel):
 			return self.engine.enroll(
 				samples=ENROLL_SAMPLES,
@@ -214,6 +243,7 @@ class Manager:
 				on_progress=progress,
 				cancelled=cancel.is_set,
 				enrolled_dims=dims or None,
+				on_frame=on_frame,
 			)
 
 		result, encodings, _stats = await self._camera(caller, work)

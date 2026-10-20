@@ -110,6 +110,14 @@
       <arg name="user" type="s"/>
       <arg name="update" type="a{sv}"/>
     </signal>
+    <!-- What the camera sees during Enroll, or VerifyNow for callers allowed
+         io.github.linuxhello.preview: a grayscale JPEG of each frame looked
+         at, a few per second, sent to the caller only. EnrollProgress face
+         boxes are fractions of this picture. -->
+    <signal name="Preview">
+      <arg name="user" type="s"/>
+      <arg name="jpeg" type="ay"/>
+    </signal>
     <signal name="ModelsChanged">
       <arg name="user" type="s"/>
     </signal>

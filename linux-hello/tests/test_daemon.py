@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 
+import numpy as np
 import pytest
 
 pytest.importorskip("dbus_fast")
@@ -64,15 +65,18 @@ class FakeEngine:
 		self.config = None
 		self.verify_calls = []
 
-	def verify(self, encodings, cancelled=None, keep_frames=None, after_match=None):
+	def verify(self, encodings, cancelled=None, keep_frames=None, after_match=None, on_frame=None):
 		from verification import VerificationResult
 		self.verify_calls.append(encodings)
+		if on_frame is not None:
+			on_frame(np.zeros((30, 40), np.uint8))
 		if after_match is not None and after_match(None, None) is False:
 			return VerificationResult.RUBBERSTAMP, FakeStats()
 		return VerificationResult.SUCCESS, FakeStats(0.21)
 
-	def enroll(self, samples, timeout, on_progress, cancelled, enrolled_dims):
+	def enroll(self, samples, timeout, on_progress, cancelled, enrolled_dims, on_frame=None):
 		from verification import VerificationResult
+		on_frame(np.zeros((30, 40), np.uint8))
 		on_progress({"state": "captured", "sample": 1, "samples": samples, "face": [0.1, 0.2, 0.5, 0.7], "darkness": 3.0})
 		return VerificationResult.SUCCESS, [[0.5, 0.5]] * samples, FakeStats()
 
@@ -139,6 +143,11 @@ def test_enroll_stores_samples_and_signals_caller_only(env):
 	progress = [s for s in signals if s[0] == "EnrollProgress"]
 	assert progress and all(s[3] == ":1.42" for s in progress)
 	assert progress[0][2][1]["state"].value == "captured"
+
+	# The picture comes first, so the face box always has one under it
+	assert signals[0][:2] == ("Preview", "say") and signals[0][3] == ":1.42"
+	user, jpeg = signals[0][2]
+	assert user == ME and jpeg[:2] == b"\xff\xd8"
 	assert ("ModelsChanged", "s", [ME]) in signals
 
 
@@ -152,6 +161,27 @@ def test_verify_only_root_or_self(env):
 	with pytest.raises(Failed):
 		run(manager.verify(caller(MY_UID), OTHER))
 	assert run(manager.verify(caller(0), OTHER)) == [0, 2.1]
+
+
+def test_camera_picture_only_for_tests_at_the_computer(env):
+	import models as model_store
+
+	model_store.add(ME, "a", [[0.1]], 1)
+	previews = lambda signals: [s for s in signals if s[0] == "Preview"]
+
+	manager, access, signals = make_manager(env, allowed={"io.github.linuxhello.preview"})
+	run(manager.verify_now(caller(MY_UID), ME))
+	assert len(previews(signals)) == 1 and signals[0][3] == ":1.42"
+	# Unlocking (PAM) never sends the picture anywhere
+	run(manager.verify(caller(MY_UID), ME))
+	run(manager.verify(caller(0), ME))
+	assert len(previews(signals)) == 1
+
+	# Not at the computer, for example over SSH
+	manager, access, signals = make_manager(env)
+	run(manager.verify_now(caller(MY_UID), ME))
+	assert previews(signals) == []
+	assert access.asked == ["io.github.linuxhello.preview"]
 
 
 def test_verify_without_models_skips_camera(env):
@@ -385,7 +415,7 @@ class ScriptedEngine(FakeEngine):
 		super().__init__()
 		self.results = list(results)
 
-	def verify(self, encodings, cancelled=None, keep_frames=None, after_match=None):
+	def verify(self, encodings, cancelled=None, keep_frames=None, after_match=None, on_frame=None):
 		self.verify_calls.append(encodings)
 		return self.results.pop(0), FakeStats()
 

@@ -196,6 +196,7 @@ Kirigami.Dialog {
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 14
                 face: kcm.enrollFace
                 good: kcm.enrollState === "captured"
+                preview: dialog.stage === "scan" ? kcm.preview : ""
             }
             Kirigami.Heading {
                 Layout.fillWidth: true
@@ -241,9 +242,10 @@ Kirigami.Dialog {
         ColumnLayout {
             spacing: Kirigami.Units.largeSpacing
 
-            QQC2.BusyIndicator {
+            FaceFrame {
                 Layout.alignment: Qt.AlignHCenter
-                running: dialog.stage === "testing"
+                Layout.preferredWidth: Kirigami.Units.gridUnit * 14
+                preview: dialog.stage === "testing" ? kcm.preview : ""
             }
             Kirigami.Heading {
                 Layout.fillWidth: true

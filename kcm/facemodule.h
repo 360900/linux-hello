@@ -38,6 +38,8 @@ class FaceModule : public KQuickConfigModule
     Q_PROPERTY(int enrollSamples READ enrollSamples NOTIFY enrollProgress)
     // The face in the camera picture, as fractions of it; empty if none
     Q_PROPERTY(QRectF enrollFace READ enrollFace NOTIFY enrollProgress)
+    // What the camera sees while scanning, as a data: URL; empty if nothing yet
+    Q_PROPERTY(QString preview READ preview NOTIFY previewChanged)
 
 public:
     // Result codes of Verify and Enroll
@@ -72,6 +74,7 @@ public:
     int enrollSample() const;
     int enrollSamples() const;
     QRectF enrollFace() const;
+    QString preview() const;
 
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void diagnose();
@@ -97,6 +100,7 @@ Q_SIGNALS:
     void camerasChanged();
     void scanningChanged();
     void enrollProgress();
+    void previewChanged();
     void enrollFinished(int result, uint modelId);
     // certainty: the best distance seen times 10, lower is closer; -1 if no face
     void verifyFinished(int result, double certainty);
@@ -105,6 +109,7 @@ Q_SIGNALS:
 
 private Q_SLOTS:
     void onEnrollProgress(const QString &user, const QVariantMap &update);
+    void onPreview(const QString &user, const QByteArray &jpeg);
     void onModelsChanged(const QString &user);
     void loadTargets();
     void loadSettings();
@@ -116,6 +121,7 @@ private:
     void call(const QString &method, const QVariantList &args, int timeout, Done done, Error failed);
     void loadStatus();
     void loadModels();
+    void startScan();
     void finishScan();
     QString user() const;
     // Shows the error, then reloads what the action may have left stale
@@ -137,4 +143,5 @@ private:
     int m_enrollSample = 0;
     int m_enrollSamples = 0;
     QRectF m_enrollFace;
+    QString m_preview;
 };

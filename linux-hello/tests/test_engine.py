@@ -250,6 +250,26 @@ def test_enroll_guides_until_samples_are_captured(monkeypatch):
 	assert capture.released
 
 
+def test_frames_are_shown_before_their_progress(monkeypatch):
+	monkeypatch.setattr(engine_module, "SAMPLE_SPACING", 0)
+	shots = [Shot(black=True), Shot([(face(), ME)])]
+	engine, _capture, _ = make(shots)
+	events = []
+	engine.enroll(samples=2, on_progress=lambda u: events.append(u["state"]),
+		on_frame=lambda gsframe: events.append(gsframe.shape))
+	# The black frame is not shown, each lit frame comes before its report
+	assert events == ["searching", "too-dark", (HEIGHT, WIDTH), "captured", (HEIGHT, WIDTH), "captured"]
+
+
+def test_verify_shows_frames_it_looks_at():
+	shots = [Shot(black=True), Shot([(face(), STRANGER)]), Shot([(face(), ME)])]
+	engine, _capture, _ = make(shots)
+	shown = []
+	result, _stats = engine.verify([ME], on_frame=shown.append)
+	assert result == VerificationResult.SUCCESS
+	assert len(shown) == 2 and shown[0].ndim == 2
+
+
 def test_enroll_spaces_samples(monkeypatch):
 	monkeypatch.setattr(engine_module, "SAMPLE_SPACING", 60)
 	engine, _capture, _ = make([Shot([(face(), ME)])], timeout=0.05)
