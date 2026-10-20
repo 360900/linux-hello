@@ -435,7 +435,8 @@ def main():
 	if len(sys.argv) < 2:
 		parser.print_help()
 		return 0
-	args = parser.parse_args()
+	# Options may come between the arguments on every Python version
+	args = parser.parse_intermixed_args()
 	if args.user is None:
 		args.user = invoking_user()
 
