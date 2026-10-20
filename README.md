@@ -9,18 +9,18 @@
 Linux Hello unlocks your screen, authenticates sudo and polkit prompts with
 your face, no terminal configuration required. It is a fork of
 [Howdy](https://github.com/boltgolt/howdy) by boltgolt, rebuilt as a
-zero-config alternative: install it, open the GUI, enroll your face, done.
+zero-config alternative: install it, open Face Unlock in System Settings,
+add your face, done.
 
 ## Features
 
 - **Zero configuration**: cameras are auto-detected (IR first), the darkness
   threshold adapts to your lighting automatically, and sane defaults are used
   everywhere.
-- **"Linux Hello" GUI app**: a Qt desktop app that looks and feels native on
-  KDE Plasma. Setup wizard, model management, settings and a live camera test,
-  all without touching a terminal.
-- **PAM integration**: face authentication for KDE lock screen, login, sudo,
-  su and polkit. Toggle per-service from the GUI.
+- **System Settings page**: add your face, test it and choose where face
+  unlock is used, without touching a terminal.
+- **PAM integration**: face authentication for the Plasma lock screen, login,
+  sudo and polkit, each turned on separately.
 - **Pluggable recognition backends**: dlib on CPU, optional Intel OpenVINO
   acceleration on iGPU, behind a common interface.
 - **WebAuthn (experimental)**: a virtual FIDO2 platform authenticator that
@@ -33,12 +33,12 @@ zero-config alternative: install it, open the GUI, enroll your face, done.
 |---|---|
 | PAM face authentication | Working (requires dlib + models) |
 | Camera auto-detection | Working |
-| Qt GUI (setup, settings, models, test) | Working, UI polish ongoing |
-| KDE integration | PAM services wired; lock-screen UI integration planned |
+| System Settings page | Working |
+| Plasma lock screen | Working on Plasma 6.8+ |
 | WebAuthn authenticator | Experimental, off by default |
 | Packaging | Debian + Arch (unofficial), untested on real systems |
 
-Python dependencies (OpenCV, dlib, PySide6) can be shipped inside a
+Python dependencies (OpenCV, dlib) can be shipped inside a
 self-contained runtime, see [Building from source](#building-from-source).
 There are no release tarballs yet, so for now this repository is for
 development, testing and review.
@@ -47,7 +47,8 @@ development, testing and review.
 
 There are two ways to build. The **bundled runtime** ships its own CPython plus
 every Python dependency; the **system Python** build uses your distro's
-interpreter and packages. Both produce the same PAM module, CLI and GUI.
+interpreter and packages. Both produce the same PAM module, service and CLI.
+The System Settings page is a separate CMake build in `kcm/`.
 
 ### 1. Build dependencies
 
@@ -60,48 +61,54 @@ The bundled runtime additionally needs `curl` (or `wget`), `tar`, `python3`,
 interpreter (no CUDA, no GUI layer), and every download is SHA256-pinned in
 `tools/runtime-manifest.json`.
 
+The System Settings page needs `cmake`, `extra-cmake-modules`, Qt 6 and
+KDE Frameworks 6 (KCMUtils, Kirigami, I18n, Config, CoreAddons).
+
 Arch / CachyOS:
 
 ```sh
 sudo pacman -S --needed base-devel meson ninja gettext pkgconf \
-	libevdev libinih systemd cmake curl ccache
+	libevdev libinih systemd cmake curl ccache \
+	extra-cmake-modules kcmutils kirigami ki18n kconfig kcoreaddons
 ```
 
 Debian / Ubuntu:
 
 ```sh
 sudo apt install build-essential meson ninja-build gettext pkg-config \
-	libpam0g-dev libevdev-dev libinih-dev libsystemd-dev cmake curl python3
+	libpam0g-dev libevdev-dev libinih-dev libsystemd-dev cmake curl python3 \
+	extra-cmake-modules qt6-declarative-dev libkf6kcmutils-dev \
+	libkf6i18n-dev libkf6config-dev libkf6coreaddons-dev
 ```
 
 Fedora:
 
 ```sh
 sudo dnf install gcc-c++ meson ninja-build gettext pkgconf-pkg-config \
-	pam-devel libevdev-devel inih-devel systemd-devel cmake curl python3
+	pam-devel libevdev-devel inih-devel systemd-devel cmake curl python3 \
+	extra-cmake-modules qt6-qtdeclarative-devel kf6-kcmutils-devel \
+	kf6-ki18n-devel kf6-kconfig-devel kf6-kcoreaddons-devel
 ```
 
 ### 2. Runtime dependencies
 
 **Bundled runtime: none from your repositories.** No `python3-opencv`, no
-`python3-dlib`, no `python3-pyside6`, no pip. The cost is ~400 MB of installed
-size and immunity to interpreter upgrades on the target machine. The GUI still
-uses the system X11/Wayland client libraries, which any desktop install already
-has (`libxcb`, `libxcb-cursor`, `libxkbcommon`, `libwayland-client`, `mesa`).
+`python3-dlib`, no pip. The cost is ~300 MB of installed size and immunity to
+interpreter upgrades on the target machine. The System Settings page needs
+Kirigami and KCMUtils, which Plasma already ships.
 
 **System Python build** needs distro packages instead:
 
 ```sh
 # Debian / Ubuntu
 sudo apt install python3-opencv python3-dlib python3-numpy \
-	python3-pyside6 python3-fido2 python3-cryptography
+	python3-dbus-fast python3-fido2 python3-cryptography
 # Arch / CachyOS
 sudo pacman -S --needed python-opencv python-dlib python-numpy \
-	python-pyside6 python-fido2 python-cryptography
+	python-dbus-fast python-fido2 python-cryptography
 ```
 
-`python3-pyside6` is only needed for the GUI, `python3-fido2` +
-`python3-cryptography` only for WebAuthn.
+`python3-fido2` and `python3-cryptography` are only needed for WebAuthn.
 
 ### 3. Configure, compile, install
 
@@ -122,6 +129,14 @@ ninja -C build
 sudo ninja -C build install
 ```
 
+Then the System Settings page:
+
+```sh
+cmake -B build-kcm -S kcm -DCMAKE_INSTALL_PREFIX=/usr
+cmake --build build-kcm
+sudo cmake --install build-kcm
+```
+
 Other build options (see `meson.options` for the full list):
 
 ```sh
@@ -133,12 +148,12 @@ Handy follow-ups:
 ```sh
 ninja -C build && sudo ninja -C build install   # rebuild after editing
 sudo ninja -C build uninstall                   # remove again
-sudo systemctl daemon-reload                    # see the Polkit note below
+sudo cmake --build build-kcm --target uninstall
 ```
 
-After installing, run the GUI app **Linux Hello** (or `linux-hello-cli` from a
-terminal) to enroll your face, then enable the PAM services you want from the
-settings page.
+After installing, open **System Settings > Security & Privacy > Face Unlock**
+(or `linux-hello-cli` in a terminal), add your face and choose where to use
+it.
 
 ## Hardware notes
 
