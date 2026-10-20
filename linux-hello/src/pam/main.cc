@@ -13,7 +13,9 @@
 #include <termios.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <chrono>
 #include <condition_variable>
 #include <cstring>
@@ -337,7 +339,19 @@ auto identify_confirmed(pam_handle_t *pamh, char *username,
   case CompareError::CONFIRM_PAUSED:
     syslog(LOG_NOTICE,
            "Face not offered, paused after requests without Enter");
-    conv_function(PAM_TEXT_INFO, S("Face is paused for a minute"));
+    {
+      // The service sends the seconds left in place of a certainty
+      auto minutes = static_cast<unsigned long>(
+          std::ceil(std::max(request.certainty(), 1.0) / 60));
+      std::string paused(ngettext("Face is paused for %lu minute for security",
+                                  "Face is paused for %lu minutes for security",
+                                  minutes));
+      auto at = paused.find("%lu");
+      if (at != std::string::npos) {
+        paused.replace(at, 3, std::to_string(minutes));
+      }
+      conv_function(PAM_TEXT_INFO, paused.c_str());
+    }
     return PAM_IGNORE;
   default:
     return linux_hello_error(result, conv_function);

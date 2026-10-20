@@ -540,6 +540,34 @@ def test_running_out_three_times_pauses_face_for_elevation(env):
 		assert run(manager.verify_confirmed(caller(0), ME))[0] == R.SUCCESS
 
 
+def test_pauses_grow_until_enter_is_used(env):
+	import models as model_store
+	from daemon import manager as manager_module
+	from verification import VerificationResult as R
+
+	model_store.add(ME, "a", [[0.1]], 1)
+	manager, _engine, _watches, _signals = make_confirming(env, [], [R.SUCCESS] * 2)
+	manager.confirm = lambda cancel: "nothing"
+
+	def pause_after_three_misses():
+		manager.confirm_paused.pop(ME, None)
+		for _ in range(3):
+			assert run(manager.verify_confirmed(caller(0), ME))[0] == R.NOT_CONFIRMED
+		result, seconds_left = run(manager.verify_confirmed(caller(0), ME))
+		assert result == R.CONFIRM_PAUSED
+		return round(seconds_left / 60)
+
+	assert [pause_after_three_misses() for _ in range(8)] == [1, 2, 4, 8, 16, 32, 60, 60]
+	assert manager_module.CONFIRM_PAUSE_MAX_SECONDS == 3600
+
+	# A person using face with Enter starts over at a minute
+	manager.confirm_paused.pop(ME, None)
+	manager.confirm = lambda cancel: "enter"
+	assert run(manager.verify_confirmed(caller(0), ME))[0] == R.SUCCESS
+	manager.confirm = lambda cancel: "nothing"
+	assert pause_after_three_misses() == 1
+
+
 def test_letting_the_window_pass_now_and_then_never_pauses(env):
 	import models as model_store
 	from verification import VerificationResult as R

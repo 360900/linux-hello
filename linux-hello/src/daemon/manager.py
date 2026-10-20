@@ -36,13 +36,17 @@ STREAK_SECONDS = 30.0
 PAUSE_SECONDS = 25.0
 
 # After this many admin prompt or sudo requests ran out without Enter within
-# CONFIRM_PAUSE_SECONDS, such requests get no face scan for that long. A
+# CONFIRM_PAUSE_SECONDS, such requests get no face scan for a while. A
 # program trying again and again in the background hoping for a lone Enter
-# gets a few tries every minute or two; a person letting the window pass to
+# soon gets only a few tries an hour; a person letting the window pass to
 # use a fingerprint does not get there. Esc only comes from a person, so it
 # counts for nothing.
 CONFIRM_MISSES = 3
 CONFIRM_PAUSE_SECONDS = 60.0
+# Each pause after another is twice as long, up to this, until a person
+# uses face with Enter again: a program that keeps trying gets a few
+# windows an hour
+CONFIRM_PAUSE_MAX_SECONDS = 3600.0
 
 # The picture the settings page shows while scanning
 PREVIEW_FPS = 12
@@ -66,6 +70,8 @@ class Manager:
 		self.confirm_misses = {}
 		# user -> monotonic time until which face is paused for elevation
 		self.confirm_paused = {}
+		# user -> pauses in a row, which makes the next one longer
+		self.confirm_pauses = {}
 
 	def methods(self):
 		return {
@@ -219,8 +225,10 @@ class Manager:
 			has_models = False
 		if not has_models:
 			return [int(VerificationResult.NO_FACE_MODEL), -1.0]
-		if time.monotonic() < self.confirm_paused.get(user, float("-inf")):
-			return [int(VerificationResult.CONFIRM_PAUSED), -1.0]
+		left = self.confirm_paused.get(user, float("-inf")) - time.monotonic()
+		if left > 0:
+			# Seconds left instead of a certainty, for the message
+			return [int(VerificationResult.CONFIRM_PAUSED), float(left)]
 
 		cancel = threading.Event()
 		self.running[caller.sender] = cancel
@@ -239,6 +247,7 @@ class Manager:
 		if cancel.is_set():
 			return [int(VerificationResult.CANCELLED), -1.0]
 		self.confirm_misses.pop(user, None)
+		self.confirm_pauses.pop(user, None)
 		return await self.verify(caller, user, pausable=False)
 
 	def _confirm_missed(self, user):
@@ -248,9 +257,12 @@ class Manager:
 			self.confirm_misses[user] = misses
 			return
 		self.confirm_misses.pop(user, None)
-		self.confirm_paused[user] = now + CONFIRM_PAUSE_SECONDS
+		pauses = self.confirm_pauses.get(user, 0)
+		seconds = min(CONFIRM_PAUSE_SECONDS * 2 ** pauses, CONFIRM_PAUSE_MAX_SECONDS)
+		self.confirm_pauses[user] = pauses + 1
+		self.confirm_paused[user] = now + seconds
 		log.info("%d elevation requests for %s ended without Enter, no face scans for them for %ds",
-			CONFIRM_MISSES, user, CONFIRM_PAUSE_SECONDS)
+			CONFIRM_MISSES, user, seconds)
 
 	def _streak(self, user):
 		count, last = self.failures.get(user, (0, 0.0))

@@ -216,5 +216,9 @@ def test_pause_is_announced(service, harness, tmp_path):  # noqa: F811
 	cli.managers[0].confirm_paused[ME] = time.monotonic() + 60
 	stacks(str(tmp_path))
 	result, _seconds = authenticate(harness, str(tmp_path), "sudo", cli.private_bus)
-	assert "Face is paused for a minute" in result.stdout and HINT not in result.stdout
+	assert "Face is paused for 1 minute for security" in result.stdout and HINT not in result.stdout
 	assert "result: Authentication failure" in result.stdout
+
+	cli.managers[0].confirm_paused[ME] = time.monotonic() + 4 * 60 + 10
+	result, _seconds = authenticate(harness, str(tmp_path), "sudo", cli.private_bus)
+	assert "Face is paused for 5 minutes for security" in result.stdout

@@ -30,8 +30,10 @@
     <!-- Verify for admin prompts and sudo, root only: the scan starts after
          Enter on a physical keyboard (daemon/confirm.py). ConfirmWindow is
          sent to the caller when that wait starts. Without Enter: 16, and
-         after 3 of those within a minute 17 for a minute without waiting;
-         18 when skipped with Esc. -->
+         after 3 of those within a minute 17 without waiting, with the
+         seconds left as certainty; a minute, then twice as long each time
+         up to an hour, until Enter is used again. 18 when skipped with
+         Esc. -->
     <method name="VerifyConfirmed">
       <arg name="user" type="s" direction="in"/>
       <arg name="result" type="u" direction="out"/>
