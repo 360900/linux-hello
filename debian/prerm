@@ -1,45 +1,10 @@
-#!/usr/bin/python3
-# Executed on deinstallation
-# Completely remove Linux Hello from the system
+#!/bin/sh
+set -e
 
-# Import required modules
-import subprocess
-import sys
-import os
-from shutil import rmtree
+if [ "$1" = remove ]; then
+	# Undo every PAM change before the module disappears
+	linux-hello-cli reset-system || true
+	systemctl stop linux-hello-daemon.service >/dev/null 2>&1 || true
+fi
 
-# Only run when we actually want to remove
-if "remove" not in sys.argv and "purge" not in sys.argv:
-	sys.exit(0)
-
-# Don't try running this if it's already gone
-if not os.path.exists("/lib/security/linux-hello/cli"):
-	sys.exit(0)
-
-# Remove files and symlinks
-try:
-	os.unlink("/usr/local/bin/linux-hello")
-except Exception:
-	print("Can't remove executable")
-try:
-	os.unlink("/usr/share/bash-completion/completions/linux-hello")
-except Exception:
-	print("Can't remove autocompletion script")
-
-# Refresh and remove Linux Hello from pam-config
-try:
-	subprocess.call(["pam-auth-update", "--package"])
-	os.remove("/usr/share/pam-configs/linux-hello")
-	subprocess.call(["pam-auth-update", "--package"])
-except Exception:
-	print("Can't remove pam module")
-
-# Remove full installation folder, just to be sure
-try:
-	rmtree("/lib/security/linux-hello")
-except Exception:
-	# This error is normal
-	pass
-
-# Remove dlib
-subprocess.call(["pip3", "uninstall", "dlib", "-y", "--no-cache-dir"])
+#DEBHELPER#

@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = purge ]; then
+	rm -rf /var/lib/linux-hello /etc/linux-hello /var/log/linux-hello
+fi
+
+#DEBHELPER#

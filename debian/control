@@ -1,16 +1,49 @@
 Source: linux-hello
-Section: misc
+Section: admin
 Priority: optional
-Standards-Version: 3.9.7
-Build-Depends: devscripts, git, dh-make, debhelper, fakeroot, python3, ninja-build, meson, libpam0g-dev, libboost-all-dev, pkg-config, libevdev-dev, libinih-dev
-Maintainer: Linux Hello contributors <tarik@localhost>
-Vcs-Git: https://github.com/360900/linux-hello
+Maintainer: tarik <80833241+360900@users.noreply.github.com>
+Build-Depends:
+ bzip2,
+ cmake,
+ debhelper-compat (= 13),
+ extra-cmake-modules,
+ file,
+ gettext,
+ libevdev-dev,
+ libinih-dev,
+ libkf6config-dev,
+ libkf6coreaddons-dev,
+ libkf6i18n-dev,
+ libkf6kcmutils-dev,
+ libpam0g-dev,
+ libsystemd-dev,
+ meson,
+ ninja-build,
+ pkgconf,
+ python3,
+ qt6-base-dev,
+ qt6-declarative-dev,
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+Homepage: https://github.com/360900/linux-hello
+Vcs-Git: https://github.com/360900/linux-hello.git
+Vcs-Browser: https://github.com/360900/linux-hello
 
 Package: linux-hello
-Homepage: https://github.com/360900/linux-hello
-Architecture: amd64
-Depends: ${misc:Depends}, libc6, libgcc-s1, libpam0g, libstdc++6, python3, python3-dlib, python3-numpy, python-opencv | python3-opencv, libinih-dev
-Recommends: python3-pyside6.qtwidgets | python3-pyside6, v4l-utils, python3-fido2, python3-cryptography
-Description: Linux Hello: Windows Hello style authentication for Linux.
- Use your built-in IR emitters and camera in combination with face recognition
- to prove who you are.
+Architecture: amd64 arm64
+Depends:
+ dbus,
+ libcrypt1,
+ polkitd,
+ qml6-module-org-kde-kcmutils,
+ qml6-module-org-kde-kirigami,
+ qml6-module-qtquick-controls,
+ qml6-module-qtquick-layouts,
+ ${misc:Depends},
+ ${shlibs:Depends},
+Description: face unlock for KDE Plasma, sudo and polkit
+ Linux Hello unlocks the Plasma lock screen and authenticates sudo and
+ polkit prompts with your face, using an infrared camera when there is one.
+ Set it up in System Settings > Security & Privacy > Face Unlock.
+ .
+ Ships its own Python runtime with OpenCV and dlib.

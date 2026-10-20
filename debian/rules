@@ -1,22 +1,56 @@
 #!/usr/bin/make -f
-DH_VERBOSE = 1
+# The Python runtime is built from the downloads in the "runtime" orig
+# component (tools/debian_orig.sh), never from the network.
 
-DPKG_EXPORT_BUILDFLAGS = 1
-include /usr/share/dpkg/default.mk
+include /usr/share/dpkg/architecture.mk
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+RUNTIME = $(CURDIR)/debian/runtime-build/linux-hello-runtime
+KCM = --buildsystem=cmake --sourcedir=kcm --builddirectory=build-kcm
+PKG = $(CURDIR)/debian/linux-hello
 
 %:
-	dh $@
+	dh $@ --buildsystem=meson
 
-build:
-	# Create build dir
-	meson setup build -Dinih:with_INIReader=true
-	# Compile shared object
-	ninja -C build
+override_dh_auto_configure:
+	tools/build_runtime.sh --outdir $(CURDIR)/debian/runtime-build \
+		--download-dir $(CURDIR)/runtime --offline --arch $(DEB_HOST_GNU_CPU)
+	mkdir -p debian/dlib-data
+	for archive in runtime/*.dat.bz2; do \
+		bzip2 -dc $$archive > debian/dlib-data/$$(basename $$archive .bz2); \
+	done
+	dh_auto_configure -- -Dbundled_python_dir=$(RUNTIME) -Ddlib_data_files=$(CURDIR)/debian/dlib-data
+	dh_auto_configure $(KCM) -- -DBUILD_TESTING=OFF
 
-clean:
-	# Delete mason build directory
-	rm -rf ./build
-	# Force remove temp debian build directory
-	rm -rf ./debian/linux-hello
-	# Make sure subprojects get pulled locally
-	meson subprojects download --sourcedir linux-hello/src/pam
+override_dh_auto_build:
+	dh_auto_build
+	dh_auto_build $(KCM)
+
+override_dh_auto_install:
+	dh_auto_install
+	dh_auto_install $(KCM)
+	# Bytecode for the paths it runs from, so nothing is written there later
+	$(PKG)/usr/lib/$(DEB_HOST_MULTIARCH)/linux-hello-runtime/python/bin/python3 -B -m compileall -f -q -j0 \
+		-s $(PKG) -p / $(PKG)/usr/lib/$(DEB_HOST_MULTIARCH)/linux-hello-runtime \
+		$(PKG)/usr/lib/$(DEB_HOST_MULTIARCH)/linux-hello
+
+override_dh_auto_test:
+
+override_dh_auto_clean:
+	dh_auto_clean
+	dh_auto_clean $(KCM)
+	rm -rf debian/runtime-build debian/dlib-data
+
+# The bundled CPython and wheels are prebuilt and must stay as they are
+override_dh_strip:
+	dh_strip -Xlinux-hello-runtime
+
+override_dh_dwz:
+	dh_dwz -Xlinux-hello-runtime
+
+override_dh_shlibdeps:
+	dh_shlibdeps -Xlinux-hello-runtime
+
+# The service starts on demand over D-Bus; WebAuthn is opt-in
+override_dh_installsystemd:
+	dh_installsystemd --no-enable --no-start
