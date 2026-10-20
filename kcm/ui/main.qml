@@ -11,6 +11,7 @@ KCM.SimpleKCM {
     readonly property bool hasFaces: kcm.models.length > 0
     readonly property var enabledTargets: kcm.targets.filter(target => target.enabled)
     readonly property var errors: kcm.checks.filter(check => check.state === "error")
+    property bool offeredSetup: false
 
     // Certainty values behind the strictness choices; lower is stricter
     readonly property var presets: [
@@ -107,6 +108,18 @@ KCM.SimpleKCM {
         function onActionFailed(message) {
             failure.text = message
             failure.visible = true
+        }
+    }
+
+    // Nothing to set up on this page without a face, so start there, once
+    Connections {
+        target: kcm
+        enabled: !root.offeredSetup
+        function onModelsChanged() {
+            root.offeredSetup = true
+            if (!root.hasFaces && !kcm.scanning) {
+                root.enroll()
+            }
         }
     }
 
