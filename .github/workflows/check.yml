@@ -11,7 +11,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y meson ninja-build libpam0g-dev libinih-dev \
-            libevdev-dev libsystemd-dev dbus qt6-declarative-dev-tools
+            libevdev-dev libsystemd-dev dbus
           python3 -m venv venv
           venv/bin/pip install pytest numpy opencv-python-headless dbus-fast
 
@@ -27,9 +27,6 @@ jobs:
       - name: Packaging sources match the manifest
         run: python3 tools/update_packaging.py --check
 
-      - name: QML
-        run: /usr/lib/qt6/bin/qmllint kcm/ui/*.qml
-
   # Build each package, install it and check the bundled runtime loads
   arch:
     runs-on: ubuntu-24.04
@@ -44,6 +41,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # Needs the Kirigami and KCMUtils QML modules, which Ubuntu lacks
+      - name: QML
+        run: /usr/lib/qt6/bin/qmllint kcm/ui/*.qml
 
       - name: Build and install
         run: |
