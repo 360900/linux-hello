@@ -72,9 +72,9 @@ auto unavailable(const std::string &name) -> bool {
 } // namespace
 
 VerifyRequest::VerifyRequest(std::string user, unsigned timeout_seconds,
-                             std::string method)
+                             std::string method, uint32_t requester)
     : user_(std::move(user)), method_(std::move(method)),
-      timeout_seconds_(timeout_seconds) {}
+      requester_(requester), timeout_seconds_(timeout_seconds) {}
 
 void VerifyRequest::cancel() { cancelled_ = true; }
 
@@ -105,9 +105,15 @@ auto VerifyRequest::run() -> Status {
 
   Reply reply;
   sd_bus_slot *slot = nullptr;
-  r = sd_bus_call_method_async(bus, &slot, BUS_NAME, OBJECT_PATH, INTERFACE,
-                               method_.c_str(), on_reply, &reply, "s",
-                               user_.c_str());
+  if (method_ == "VerifyConfirmed") {
+    r = sd_bus_call_method_async(bus, &slot, BUS_NAME, OBJECT_PATH, INTERFACE,
+                                 method_.c_str(), on_reply, &reply, "su",
+                                 user_.c_str(), requester_);
+  } else {
+    r = sd_bus_call_method_async(bus, &slot, BUS_NAME, OBJECT_PATH, INTERFACE,
+                                 method_.c_str(), on_reply, &reply, "s",
+                                 user_.c_str());
+  }
   if (r < 0) {
     error_ = std::string("cannot send the request: ") + std::strerror(-r);
     sd_bus_slot_unref(window_slot);

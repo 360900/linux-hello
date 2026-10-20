@@ -5,6 +5,7 @@ import pwd
 import shutil
 import subprocess
 import sys
+import threading
 import time
 
 import numpy as np
@@ -33,6 +34,12 @@ class FakeAccess:
 	async def resolve(self, sender):
 		from daemon.dispatch import Caller
 		return Caller(sender, MY_UID)
+
+	# Whether the asking process and the user count as at this computer
+	local = True
+
+	async def has_local_session(self, uid, pid):
+		return self.local
 
 	async def authorized(self, caller, action):
 		self.asked.append(action)
@@ -500,7 +507,7 @@ def test_confirmed_verification_is_root_only(env):
 	model_store.add(ME, "a", [[0.1]], 1)
 	manager, _engine, watches, _signals = make_confirming(env, ["enter"])
 	with pytest.raises(Failed) as error:
-		run(manager.verify_confirmed(caller(MY_UID), ME))
+		run(manager.verify_confirmed(caller(MY_UID), ME, 0))
 	assert error.value.type.endswith("PermissionDenied")
 	assert watches == []
 
@@ -511,7 +518,7 @@ def test_scan_only_after_enter(env):
 
 	model_store.add(ME, "a", [[0.1]], 1)
 	manager, engine, watches, signals = make_confirming(env, ["enter"], [R.SUCCESS])
-	assert run(manager.verify_confirmed(caller(0), ME))[0] == R.SUCCESS
+	assert run(manager.verify_confirmed(caller(0), ME, 0))[0] == R.SUCCESS
 	assert len(watches) == 1 and len(engine.verify_calls) == 1
 	# The module asks for Enter only once the service listens for it
 	assert signals == [("ConfirmWindow", "s", [ME], ":1.42")]
@@ -526,10 +533,10 @@ def test_running_out_three_times_pauses_face_for_elevation(env):
 		model_store.add(ME, "a", [[0.1]], 1)
 		manager, engine, watches, signals = make_confirming(env, [nobody_pressed] * 3 + ["enter"], [R.SUCCESS, R.SUCCESS])
 		for _ in range(3):
-			assert run(manager.verify_confirmed(caller(0), ME))[0] == R.NOT_CONFIRMED
+			assert run(manager.verify_confirmed(caller(0), ME, 0))[0] == R.NOT_CONFIRMED
 		# A program trying again right away gets no scan, no keyboard watch
 		# and no window to show
-		assert run(manager.verify_confirmed(caller(0), ME))[0] == R.CONFIRM_PAUSED
+		assert run(manager.verify_confirmed(caller(0), ME, 0))[0] == R.CONFIRM_PAUSED
 		assert len(watches) == 3 and len(signals) == 3 and engine.verify_calls == []
 		# Unlocking and tests are not affected
 		assert run(manager.verify(caller(0), ME))[0] == R.SUCCESS
@@ -537,7 +544,7 @@ def test_running_out_three_times_pauses_face_for_elevation(env):
 		# A minute later
 		assert manager.confirm_paused[ME] - time.monotonic() > manager_module.CONFIRM_PAUSE_SECONDS - 5
 		manager.confirm_paused[ME] = time.monotonic()
-		assert run(manager.verify_confirmed(caller(0), ME))[0] == R.SUCCESS
+		assert run(manager.verify_confirmed(caller(0), ME, 0))[0] == R.SUCCESS
 
 
 def test_pauses_grow_until_enter_is_used(env):
@@ -552,8 +559,8 @@ def test_pauses_grow_until_enter_is_used(env):
 	def pause_after_three_misses():
 		manager.confirm_paused.pop(ME, None)
 		for _ in range(3):
-			assert run(manager.verify_confirmed(caller(0), ME))[0] == R.NOT_CONFIRMED
-		result, seconds_left = run(manager.verify_confirmed(caller(0), ME))
+			assert run(manager.verify_confirmed(caller(0), ME, 0))[0] == R.NOT_CONFIRMED
+		result, seconds_left = run(manager.verify_confirmed(caller(0), ME, 0))
 		assert result == R.CONFIRM_PAUSED
 		return round(seconds_left / 60)
 
@@ -563,7 +570,7 @@ def test_pauses_grow_until_enter_is_used(env):
 	# A person using face with Enter starts over at a minute
 	manager.confirm_paused.pop(ME, None)
 	manager.confirm = lambda cancel: "enter"
-	assert run(manager.verify_confirmed(caller(0), ME))[0] == R.SUCCESS
+	assert run(manager.verify_confirmed(caller(0), ME, 0))[0] == R.SUCCESS
 	manager.confirm = lambda cancel: "nothing"
 	assert pause_after_three_misses() == 1
 
@@ -574,15 +581,15 @@ def test_letting_the_window_pass_now_and_then_never_pauses(env):
 
 	model_store.add(ME, "a", [[0.1]], 1)
 	manager, _engine, _watches, _signals = make_confirming(env, ["nothing", "nothing", "enter", "nothing", "nothing"], [R.SUCCESS])
-	results = [run(manager.verify_confirmed(caller(0), ME))[0] for _ in range(5)]
+	results = [run(manager.verify_confirmed(caller(0), ME, 0))[0] for _ in range(5)]
 	# Enter in between starts the count over
 	assert results == [R.NOT_CONFIRMED, R.NOT_CONFIRMED, R.SUCCESS, R.NOT_CONFIRMED, R.NOT_CONFIRMED]
 
 	# Misses older than the pause do not count
 	manager.confirm_misses[ME] = [time.monotonic() - 120] * 2
 	manager.confirm = lambda cancel: "nothing"
-	assert run(manager.verify_confirmed(caller(0), ME))[0] == R.NOT_CONFIRMED
-	assert run(manager.verify_confirmed(caller(0), ME))[0] == R.NOT_CONFIRMED
+	assert run(manager.verify_confirmed(caller(0), ME, 0))[0] == R.NOT_CONFIRMED
+	assert run(manager.verify_confirmed(caller(0), ME, 0))[0] == R.NOT_CONFIRMED
 
 
 def test_killed_requests_count_too(env):
@@ -601,9 +608,56 @@ def test_killed_requests_count_too(env):
 
 	manager.confirm = killed
 	for _ in range(3):
-		run(manager.verify_confirmed(caller(0), ME))
-	assert run(manager.verify_confirmed(caller(0), ME))[0] == R.CONFIRM_PAUSED
+		run(manager.verify_confirmed(caller(0), ME, 0))
+	assert run(manager.verify_confirmed(caller(0), ME, 0))[0] == R.CONFIRM_PAUSED
 	assert len(watches) == 3 and engine.verify_calls == []
+
+
+def test_only_the_user_at_this_computer(env):
+	# Another account (pkexec choosing this user as admin) or a remote
+	# session gets nothing, and cannot pause the user's face either
+	import models as model_store
+	from verification import VerificationResult as R
+
+	model_store.add(ME, "a", [[0.1]], 1)
+	manager, engine, watches, signals = make_confirming(env, ["enter"] * 2, [R.SUCCESS])
+	# pid 1 belongs to root, not to the user
+	assert run(manager.verify_confirmed(caller(0), ME, 1))[0] == R.NOT_LOCAL
+	manager.access.local = False
+	for _ in range(5):
+		assert run(manager.verify_confirmed(caller(0), ME, os.getpid()))[0] == R.NOT_LOCAL
+	assert watches == [] and signals == [] and manager.confirm_paused == {}
+
+	manager.access.local = True
+	assert run(manager.verify_confirmed(caller(0), ME, os.getpid()))[0] == R.SUCCESS
+
+
+def test_one_enter_never_approves_two_requests(env):
+	# A program starts its own sudo right next to the user's real one
+	import models as model_store
+	from verification import VerificationResult as R
+
+	model_store.add(ME, "a", [[0.1]], 1)
+	manager, engine, _watches, _signals = make_confirming(env, [], [R.SUCCESS] * 2)
+	started = threading.Event()
+
+	def enter_after_the_second_arrives(cancel):
+		started.set()
+		time.sleep(0.2)
+		return "enter"
+
+	manager.confirm = enter_after_the_second_arrives
+
+	async def both():
+		first = asyncio.ensure_future(manager.verify_confirmed(caller(0), ME, 0))
+		await asyncio.to_thread(started.wait)
+		second = await manager.verify_confirmed(caller(0), ME, 0)
+		return (await first)[0], second[0]
+
+	assert run(both()) == (R.CONFIRM_CONFLICT, R.CONFIRM_CONFLICT)
+	assert engine.verify_calls == []
+	# Afterwards a single request works again
+	assert run(manager.verify_confirmed(caller(0), ME, 0))[0] == R.SUCCESS
 
 
 def test_esc_skips_without_pausing(env):
@@ -612,16 +666,16 @@ def test_esc_skips_without_pausing(env):
 
 	model_store.add(ME, "a", [[0.1]], 1)
 	manager, engine, _watches, _signals = make_confirming(env, ["skip", "enter"], [R.SUCCESS])
-	assert run(manager.verify_confirmed(caller(0), ME))[0] == R.SKIPPED
+	assert run(manager.verify_confirmed(caller(0), ME, 0))[0] == R.SKIPPED
 	assert engine.verify_calls == []
-	assert run(manager.verify_confirmed(caller(0), ME))[0] == R.SUCCESS
+	assert run(manager.verify_confirmed(caller(0), ME, 0))[0] == R.SUCCESS
 
 
 def test_no_face_no_keyboard_watch(env):
 	from verification import VerificationResult as R
 
 	manager, _engine, watches, signals = make_confirming(env, ["enter"])
-	assert run(manager.verify_confirmed(caller(0), ME))[0] == R.NO_FACE_MODEL
+	assert run(manager.verify_confirmed(caller(0), ME, 0))[0] == R.NO_FACE_MODEL
 	assert watches == [] and signals == []
 
 
@@ -653,3 +707,36 @@ def test_success_and_time_reset_the_streak(env, monkeypatch):
 	assert manager._streak(ME) == 1
 	monkeypatch.setattr(manager_module, "STREAK_SECONDS", -1)
 	assert manager._streak(ME) == 0
+
+
+def test_local_session_rules():
+	from daemon.access import Access
+
+	def logind(sessions, by_pid=None):
+		"""An Access answering from a fake logind: path -> (uid, seat, active, remote)"""
+		access = Access(None)
+
+		async def call(_destination, path, _interface, member, _signature, body):
+			if member == "GetSessionByPID":
+				return None if by_pid is None else [by_pid]
+			if member == "ListSessions":
+				return [[(path, uid, "u", seat, path) for path, (uid, seat, _a, _r) in sessions.items()]]
+			uid, seat, active, remote = sessions[path]
+			return [{"Active": Variant("b", active), "Remote": Variant("b", remote)}]
+
+		access._call_or_none = call
+		return access
+
+	from dbus_fast import Variant
+	desk = {"/s/1": (1000, "seat0", True, False)}
+	# A terminal app on Plasma: outside any session, the user is at the desk
+	assert run(logind(desk).has_local_session(1000, 4242))
+	# Nobody at the desk: only an ssh session, or a desk session of someone else
+	assert not run(logind({"/s/2": (1000, "", True, True)}).has_local_session(1000, 4242))
+	assert not run(logind({"/s/1": (1001, "seat0", True, False)}).has_local_session(1000, 4242))
+	# Switched away (another user's session in front)
+	assert not run(logind({"/s/1": (1000, "seat0", False, False)}).has_local_session(1000, 4242))
+	# Asked from an ssh session while the user is also at the desk
+	both = dict(desk, **{"/s/2": (1000, "", True, True)})
+	assert not run(logind(both, by_pid="/s/2").has_local_session(1000, 4242))
+	assert run(logind(both, by_pid="/s/1").has_local_session(1000, 4242))

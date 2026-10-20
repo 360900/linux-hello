@@ -20,6 +20,8 @@ enum CompareError : std::uint8_t {
   NOT_CONFIRMED = 16,
   CONFIRM_PAUSED = 17,
   SKIPPED = 18,
+  NOT_LOCAL = 19,
+  CONFIRM_CONFLICT = 20,
   CANCELLED = 250
 };
 

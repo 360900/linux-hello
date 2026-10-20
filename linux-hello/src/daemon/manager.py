@@ -6,6 +6,7 @@
 import asyncio
 import logging
 import os
+import pwd
 import threading
 import time
 
@@ -72,13 +73,15 @@ class Manager:
 		self.confirm_paused = {}
 		# user -> pauses in a row, which makes the next one longer
 		self.confirm_pauses = {}
+		# The Enter window running now, if any
+		self.confirm_window = None
 
 	def methods(self):
 		return {
 			"GetStatus": ("", "a{sv}", self.get_status),
 			"Verify": ("s", "ud", self.verify),
 			"VerifyNow": ("s", "ud", self.verify_now),
-			"VerifyConfirmed": ("s", "ud", self.verify_confirmed),
+			"VerifyConfirmed": ("su", "ud", self.verify_confirmed),
 			"Enroll": ("ss", "uu", self.enroll),
 			"Cancel": ("", "", self.cancel),
 			"ListModels": ("s", "a(uxs)", self.list_models),
@@ -211,14 +214,25 @@ class Manager:
 		preview = await self.access.authorized(caller, ACTION_PREVIEW)
 		return await self.verify(caller, user, pausable=False, preview=preview)
 
-	async def verify_confirmed(self, caller, user):
+	async def verify_confirmed(self, caller, user, requester):
 		# Admin prompts and sudo, from the PAM module running as root in sudo
 		# or polkit's helper: the scan starts only after a person pressed
 		# Enter, see daemon/confirm.py. ConfirmWindow tells the caller when
-		# to ask for it.
+		# to ask for it. requester is the process that asked (sudo, the
+		# polkit agent), 0 when unknown (passkeys).
 		if caller.uid != 0:
 			raise Failed("PermissionDenied", "Only root may ask for a confirmed verification")
 		self._check_user(user)
+		# Someone else, or someone not at this computer, must not get the
+		# face of whoever sits there. Refused before any window, so it
+		# cannot pause the user's face either.
+		uid = pwd.getpwnam(user).pw_uid
+		if requester and _real_uid(requester) != uid:
+			log.warning("Elevation for %s asked by process %d of another user, refused", user, requester)
+			return [int(VerificationResult.NOT_LOCAL), -1.0]
+		if not await self.access.has_local_session(uid, requester):
+			log.warning("Elevation for %s asked from outside a local session, refused", user)
+			return [int(VerificationResult.NOT_LOCAL), -1.0]
 		try:
 			has_models = bool(model_store.load(user))
 		except model_store.ModelError:
@@ -230,6 +244,15 @@ class Manager:
 			# Seconds left instead of a certainty, for the message
 			return [int(VerificationResult.CONFIRM_PAUSED), float(left)]
 
+		# One window at a time: one Enter must not approve a second request
+		# started next to the real one. Both are refused.
+		if self.confirm_window is not None:
+			self.confirm_window["overlapped"] = True
+			log.warning("Two elevation requests at once, refusing both")
+			self._confirm_missed(user)
+			return [int(VerificationResult.CONFIRM_CONFLICT), -1.0]
+		window = {"overlapped": False}
+		self.confirm_window = window
 		cancel = threading.Event()
 		self.running[caller.sender] = cancel
 		try:
@@ -237,6 +260,10 @@ class Manager:
 			pressed = await asyncio.to_thread(self.confirm, cancel)
 		finally:
 			self.running.pop(caller.sender, None)
+			self.confirm_window = None
+		if window["overlapped"]:
+			self._confirm_missed(user)
+			return [int(VerificationResult.CONFIRM_CONFLICT), -1.0]
 		if pressed == confirm_module.SKIP:
 			return [int(VerificationResult.SKIPPED), -1.0]
 		if pressed != confirm_module.ENTER:
@@ -505,6 +532,18 @@ class Manager:
 		if _selinux_enforcing():
 			add("selinux", "info", "SELinux is enforcing; if the camera fails, check the audit log")
 		return [checks]
+
+
+def _real_uid(pid):
+	"""Real uid of a process (sudo is setuid root, its real uid is the user's), None if gone"""
+	try:
+		with open("/proc/{}/status".format(pid)) as file:
+			for line in file:
+				if line.startswith("Uid:"):
+					return int(line.split()[1])
+	except (OSError, ValueError, IndexError):
+		return None
+	return None
 
 
 def _rubberstamps(config, capture, backend):

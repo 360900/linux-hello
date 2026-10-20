@@ -72,6 +72,42 @@ class Access:
 		except KeyError:
 			return None
 
+	async def has_local_session(self, uid, pid):
+		"""
+		Whether someone can be at the keyboard for uid: the asking process
+		(pid, 0 when unknown) is not in a remote or inactive session, and
+		the user has an active session at a seat. Apps on Plasma run in the
+		user's systemd instance, outside any session, so a process without
+		one only needs the second.
+		"""
+		login1 = "org.freedesktop.login1"
+		if pid:
+			path = await self._call_or_none(login1, "/org/freedesktop/login1", login1 + ".Manager",
+				"GetSessionByPID", "u", [pid])
+			if path is not None and not self._local_and_active(await self._session(path[0])):
+				return False
+		sessions = await self._call_or_none(login1, "/org/freedesktop/login1", login1 + ".Manager",
+			"ListSessions", "", [])
+		for _id, session_uid, _user, seat, path in (sessions[0] if sessions else []):
+			if session_uid == uid and seat and self._local_and_active(await self._session(path)):
+				return True
+		return False
+
+	async def _call_or_none(self, *args):
+		try:
+			return await self._call(*args)
+		except Failed:
+			return None
+
+	async def _session(self, path):
+		reply = await self._call_or_none("org.freedesktop.login1", path, "org.freedesktop.DBus.Properties",
+			"GetAll", "s", ["org.freedesktop.login1.Session"])
+		return {key: value.value for key, value in reply[0].items()} if reply else {}
+
+	@staticmethod
+	def _local_and_active(properties):
+		return properties.get("Active") is True and properties.get("Remote") is False
+
 	def is_self(self, caller, user):
 		return caller.uid != 0 and self.user_name(caller.uid) == user
 

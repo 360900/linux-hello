@@ -52,6 +52,10 @@ def service(fake_paths, private_bus, tmp_path, request):  # noqa: F811
 		async def authorized(self, caller, action):
 			return caller.uid == 0 or action in allowed
 
+		async def has_local_session(self, uid, pid):
+			# No logind on the test bus: as if at this computer
+			return True
+
 	if request.node.get_closest_marker("as_root"):
 		class RootAccess(Access):
 			async def resolve(self, sender):

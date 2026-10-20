@@ -10,6 +10,7 @@
 #include <sys/types.h>
 #include <syslog.h>
 #include <fcntl.h>
+#include <sys/socket.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -45,11 +46,12 @@ const auto MAX_RETRIES = 5;
 // Services that unlock or start the user's own session. Every other service
 // (sudo, su, polkit, run0, anything unknown) grants more than that, so a
 // face only counts there after a physical Enter press, see needs_confirmation
-const std::array<const char *, 15> SESSION_SERVICES = {
-    "kde",         "kde-fingerprint", "kde-face",      "kscreensaver",
-    "plasmalogin", "sddm",            "login",         "gdm-password",
-    "lightdm",     "greetd",          "xscreensaver",  "swaylock",
-    "hyprlock",    "i3lock",          "sddm-greeter"};
+// "login" is not one: telnet and rlogin use it too.
+const std::array<const char *, 14> SESSION_SERVICES = {
+    "kde",          "kde-fingerprint", "kde-face",     "kscreensaver",
+    "plasmalogin",  "sddm",            "gdm-password", "lightdm",
+    "greetd",       "xscreensaver",    "swaylock",     "hyprlock",
+    "i3lock",       "sddm-greeter"};
 
 // RAII guard to ensure closelog() is called when identify() returns,
 // regardless of which early-return path is taken.
@@ -120,9 +122,12 @@ auto linux_hello_status(char *username, unsigned result, const LayeredConfig &co
 
   if (!config.GetBoolean("core", "no_confirmation", true)) {
     // Construct confirmation text from i18n string
-    std::string confirm_text(S("Identified face as {}"));
-    std::string identify_msg =
-        confirm_text.replace(confirm_text.find("{}"), 2, std::string(username));
+    std::string identify_msg(S("Identified face as {}"));
+    // A translation without the placeholder must not throw inside sudo
+    auto at = identify_msg.find("{}");
+    if (at != std::string::npos) {
+      identify_msg.replace(at, 2, username);
+    }
     conv_function(PAM_TEXT_INFO, identify_msg.c_str());
   }
 
@@ -239,6 +244,32 @@ auto needs_confirmation(pam_handle_t *pamh, const LayeredConfig &config,
 }
 
 /**
+ * The process that asked, for the service to check whose and from where:
+ * sudo or su itself, or for polkit the authentication agent. polkit's helper
+ * is started by systemd with the agent on its stdin socket, or older ones by
+ * the agent directly. 0 when it cannot be told.
+ */
+auto requester_pid(pam_handle_t *pamh) -> pid_t {
+  const void *service = nullptr;
+  if (pam_get_item(pamh, PAM_SERVICE, &service) != PAM_SUCCESS ||
+      service == nullptr) {
+    return 0;
+  }
+  if (strcmp(static_cast<const char *>(service), "polkit-1") != 0) {
+    return getpid();
+  }
+  if (getppid() != 1) {
+    return getppid();
+  }
+  ucred peer{};
+  socklen_t length = sizeof(peer);
+  if (getsockopt(STDIN_FILENO, SOL_SOCKET, SO_PEERCRED, &peer, &length) != 0) {
+    return 0;
+  }
+  return peer.pid;
+}
+
+/**
  * Keeps keys pressed during the face window off the screen and out of the
  * next prompt, like sudo does for its own: echo off while the window runs,
  * unread input dropped after it. Only for a terminal (sudo, su); polkit
@@ -312,9 +343,15 @@ auto identify_confirmed(pam_handle_t *pamh, char *username,
                          ? S("Press Enter to use your face, or Esc to skip")
                          : S("Press Enter to use your face");
 
+  pid_t requester = requester_pid(pamh);
+  if (requester <= 0) {
+    syslog(LOG_NOTICE, "Face not offered, cannot tell who asked");
+    return PAM_IGNORE;
+  }
+
   // The service waits up to 3 seconds for Enter before scanning
   VerifyRequest request(username, service_timeout(config) + 5,
-                        "VerifyConfirmed");
+                        "VerifyConfirmed", static_cast<uint32_t>(requester));
   request.on_window([&] {
     terminal.start();
     conv_function(PAM_TEXT_INFO, hint);
@@ -332,6 +369,16 @@ auto identify_confirmed(pam_handle_t *pamh, char *username,
     return linux_hello_status(username, result, config, conv_function);
   case CompareError::SKIPPED:
     syslog(LOG_INFO, "Face skipped with Esc");
+    return PAM_IGNORE;
+  case CompareError::NOT_LOCAL:
+    syslog(LOG_NOTICE, "Face not offered, asked from outside a local session "
+                       "or by another user");
+    return PAM_IGNORE;
+  case CompareError::CONFIRM_CONFLICT:
+    syslog(LOG_WARNING, "Face not used, another request asked at the same time");
+    conv_function(PAM_ERROR_MSG,
+                  S("Face not used: something else asked for it at the same "
+                    "time"));
     return PAM_IGNORE;
   case CompareError::NOT_CONFIRMED:
     syslog(LOG_NOTICE, "Face not used, Enter was not pressed alone in time");

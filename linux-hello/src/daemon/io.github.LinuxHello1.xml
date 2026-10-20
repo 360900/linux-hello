@@ -36,6 +36,11 @@
          Esc. -->
     <method name="VerifyConfirmed">
       <arg name="user" type="s" direction="in"/>
+      <!-- The process that asked (sudo, the polkit agent), 0 if unknown. It
+           must belong to user and not be in a remote or inactive session,
+           and user must have an active local session, else 19. Two at once
+           both get 20. -->
+      <arg name="requester" type="u" direction="in"/>
       <arg name="result" type="u" direction="out"/>
       <arg name="certainty" type="d" direction="out"/>
     </method>

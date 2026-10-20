@@ -25,6 +25,10 @@ class VerificationResult(enum.IntEnum):
 	NOT_CONFIRMED = 16
 	CONFIRM_PAUSED = 17
 	SKIPPED = 18
+	# Asked by another user or from outside a local session
+	NOT_LOCAL = 19
+	# Another confirmed verification overlapped this one
+	CONFIRM_CONFLICT = 20
 	CANCELLED = 250
 	# Not produced by the service: it could not be asked or did not answer
 	UNKNOWN_ERROR = 251
@@ -102,8 +106,9 @@ class FaceVerifier:
 				path=self.OBJECT_PATH,
 				interface=self.INTERFACE,
 				member="VerifyConfirmed" if confirmed else "VerifyNow",
-				signature="s",
-				body=[user],
+				# A passkey request comes from the browser: who asked is unknown
+				signature="su" if confirmed else "s",
+				body=[user, 0] if confirmed else [user],
 			)), timeout)
 		except asyncio.TimeoutError:
 			return VerificationResult.TIMEOUT_REACHED
