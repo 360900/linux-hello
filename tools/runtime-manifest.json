@@ -35,45 +35,6 @@
         "filename": "opencv_python_headless-5.0.0.93-cp37-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl"
       }
     },
-    "shiboken6": {
-      "version": "6.11.2",
-      "x86_64": {
-        "url": "https://files.pythonhosted.org/packages/a5/9a/f41bea4316d0c1bec4800842dcb4bd8fd3e29d6a79c496bc32e1aec42583/shiboken6-6.11.2-cp310-abi3-manylinux_2_34_x86_64.whl",
-        "sha256": "7a7a0a72a9ed26c9bf77d42246b1c736486befb8f31aa2fb29957ea4cdd1c1c2",
-        "filename": "shiboken6-6.11.2-cp310-abi3-manylinux_2_34_x86_64.whl"
-      },
-      "aarch64": {
-        "url": "https://files.pythonhosted.org/packages/56/05/79ed0697515d4fc7435459e4ed4c4a3b5621a55b7c91d0f3f2cc3d617aa0/shiboken6-6.11.2-cp310-abi3-manylinux_2_39_aarch64.whl",
-        "sha256": "4bbbd6fa4d7cff5ec5e12bc4c10e1d845fa30c89457ecb13cc64f7bddb77f6f9",
-        "filename": "shiboken6-6.11.2-cp310-abi3-manylinux_2_39_aarch64.whl"
-      }
-    },
-    "PySide6-Essentials": {
-      "version": "6.11.2",
-      "x86_64": {
-        "url": "https://files.pythonhosted.org/packages/0e/1a/84a84bbc75835ee88abdcb66eb875b8e1a21834af9b833bc1893f2c1bfaf/pyside6_essentials-6.11.2-cp310-abi3-manylinux_2_34_x86_64.whl",
-        "sha256": "aaf9f25f0f324874085fa5b26a610318db8a8e243cf85bb3e5400595191c7778",
-        "filename": "pyside6_essentials-6.11.2-cp310-abi3-manylinux_2_34_x86_64.whl"
-      },
-      "aarch64": {
-        "url": "https://files.pythonhosted.org/packages/60/4c/d92b08a2151d095b9a3725fa0e71b215ec686d40bbd5d8b702d21a9b5eaa/pyside6_essentials-6.11.2-cp310-abi3-manylinux_2_39_aarch64.whl",
-        "sha256": "d3ec6e1885c46e57f16364f38ea8040ffc5dc0b18341058f608fede3ba930567",
-        "filename": "pyside6_essentials-6.11.2-cp310-abi3-manylinux_2_39_aarch64.whl"
-      }
-    },
-    "PySide6": {
-      "version": "6.11.2",
-      "x86_64": {
-        "url": "https://files.pythonhosted.org/packages/b2/fe/968844def58150a41568b505edca0d68df6901b20ea4222ccb0c069cc703/pyside6-6.11.2-cp310-abi3-manylinux_2_34_x86_64.whl",
-        "sha256": "dc6d03990489a5085842770718392ef5de36352d8f608d9a9fe03e60af4d7b66",
-        "filename": "pyside6-6.11.2-cp310-abi3-manylinux_2_34_x86_64.whl"
-      },
-      "aarch64": {
-        "url": "https://files.pythonhosted.org/packages/5e/5c/f4ecc6defaec645e5ac3ca2f99e3da286a28d1c647c2d10b584e0392b94c/pyside6-6.11.2-cp310-abi3-manylinux_2_39_aarch64.whl",
-        "sha256": "57fe867a6c93821a085d74e8a26f863fc2363516848181c466032595b33b1729",
-        "filename": "pyside6-6.11.2-cp310-abi3-manylinux_2_39_aarch64.whl"
-      }
-    },
     "cffi": {
       "version": "2.1.1",
       "x86_64": {

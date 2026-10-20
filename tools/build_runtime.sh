@@ -79,7 +79,7 @@ echo ">> CPython tarball hash verified"
 # 2. Wheels: download + verify sha256 from the manifest, then install
 # ---------------------------------------------------------------------------
 WHEELS=()
-for PKG in numpy opencv-python-headless shiboken6 PySide6-Essentials PySide6 cffi pycparser cryptography fido2 dbus-fast; do
+for PKG in numpy opencv-python-headless cffi pycparser cryptography fido2 dbus-fast; do
     read -r FILENAME URL EXPECTED <<EOF
 $(python3 - "$PKG" "$ARCH" "$MANIFEST" <<'PYEOF'
 import json, sys
@@ -184,25 +184,7 @@ if [ "${NO_STRIP:-0}" != "1" ]; then
         -exec rm -rf {} + 2>/dev/null || true
 fi
 
-# ---------------------------------------------------------------------------
-# 5. Prune PySide6 down to what the app uses (QtCore/QtGui/QtWidgets + deps)
-# ---------------------------------------------------------------------------
-QT_KEEP=" Core Gui Widgets Network DBus Svg Xml "
 rm -rf "$SITE/pip" "$SITE"/pip-*.dist-info
-rm -rf "$SITE/PySide6/Qt/qml" "$SITE/PySide6/Qt/translations"
-rm -rf "$SITE/PySide6"/{assistant,designer,doc,include,linguist,lrelease,lupdate,qmlformat,qmllint,qmlls,svgtoqml}
-rm -f "$SITE/PySide6"/libpyside6qml.abi3.so.*
-for so in "$SITE"/PySide6/*.abi3.so; do
-    MOD="$(basename "$so" | sed 's/^Qt//; s/\.abi3\.so$//')"
-    case "$QT_KEEP" in *" $MOD "*) continue ;; esac
-    rm -f "$so" "${so%.abi3.so}.pyi"
-done
-for lib in "$SITE/PySide6/Qt/lib"/libQt6*; do
-    [ -e "$lib" ] || continue
-    MOD="$(basename "$lib" | sed 's/^libQt6//; s/\.so.*$//')"
-    case "$QT_KEEP" in *" $MOD "*) continue ;; esac
-    rm -f "$lib"
-done
 
 # ---------------------------------------------------------------------------
 # 4. Smoke test the assembled runtime
@@ -223,8 +205,6 @@ import fido2.ctap2
 print("fido2 ok")
 import dbus_fast.aio
 print("dbus-fast ok")
-from PySide6 import QtWidgets, QtGui, QtCore
-print("PySide6", QtCore.__version__)
 EOF
 
 echo ">> runtime ready at ${RUNTIME}"
