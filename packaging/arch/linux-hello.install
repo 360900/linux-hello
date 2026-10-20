@@ -1,0 +1,18 @@
+post_install() {
+	echo "Open System Settings > Security & Privacy > Face Unlock to add your face."
+}
+
+post_upgrade() {
+	# A running service keeps the old code until it is restarted
+	systemctl try-restart linux-hello-daemon.service 2>/dev/null || true
+}
+
+pre_remove() {
+	# Undo every PAM change before the module disappears
+	linux-hello-cli reset-system || true
+	systemctl stop linux-hello-daemon.service 2>/dev/null || true
+}
+
+post_remove() {
+	echo "Face models and settings are kept in /var/lib/linux-hello and /etc/linux-hello."
+}

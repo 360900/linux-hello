@@ -1,0 +1,154 @@
+# Builds the current master branch with the bundled Python runtime.
+# The pinned downloads below come from tools/runtime-manifest.json; refresh
+# them with tools/update_pkgbuild.py after changing the manifest.
+# LINUX_HELLO_GIT overrides the repository, e.g. for local builds:
+#   LINUX_HELLO_GIT="git+file://$HOME/linux-hello#branch=remake" makepkg
+
+pkgname=linux-hello-git
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Face unlock for KDE Plasma, sudo and polkit with IR cameras"
+arch=('x86_64' 'aarch64')
+url="https://github.com/360900/linux-hello"
+license=('GPL-3.0-only' 'MIT')
+depends=(
+	'dbus'
+	'gcc-libs'
+	'glibc'
+	'kcmutils'
+	'kconfig'
+	'kcoreaddons'
+	'ki18n'
+	'kirigami'
+	'libevdev'
+	'libinih'
+	'libxcrypt-compat'
+	'pam'
+	'polkit'
+	'qt6-base'
+	'qt6-declarative'
+	'systemd-libs'
+)
+makedepends=('cmake' 'extra-cmake-modules' 'git' 'meson' 'ninja' 'python')
+provides=('linux-hello')
+conflicts=('linux-hello')
+install=linux-hello.install
+# The bundled CPython must not be stripped again
+options=('!strip' '!debug')
+
+source=("linux-hello::${LINUX_HELLO_GIT:-git+https://github.com/360900/linux-hello.git}")
+sha256sums=('SKIP')
+
+# BEGIN pinned sources (tools/update_pkgbuild.py)
+source_x86_64=(
+	'cpython-3.12.14+20260901-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz::https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz'
+	'numpy-2.5.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl::https://files.pythonhosted.org/packages/65/af/aa78d1a88805456e212b65461354cd943197fb9acecc4c90fd12295123a3/numpy-2.5.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl'
+	'opencv_python_headless-5.0.0.93-cp37-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl::https://files.pythonhosted.org/packages/2b/97/8170e9819764c47e436c130d3ff6cfb73b58f923eae9d3a03d8982b04aec/opencv_python_headless-5.0.0.93-cp37-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl'
+	'cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl::https://files.pythonhosted.org/packages/b1/db/dceb9dd5b231e1da801793f8acc9f3c52a7e1afe40bb1aae37e02b0faad5/cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl'
+	'pycparser-3.0-py3-none-any.whl::https://files.pythonhosted.org/packages/0c/c3/44f3fbbfa403ea2a7c779186dc20772604442dde72947e7d01069cbe98e3/pycparser-3.0-py3-none-any.whl'
+	'cryptography-50.0.1-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl::https://files.pythonhosted.org/packages/57/26/e6d4fc8512a51a5f9ee7bfdbfb853bce1197087df40c9ad993ad370b846f/cryptography-50.0.1-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl'
+	'fido2-2.2.1-py3-none-any.whl::https://files.pythonhosted.org/packages/71/84/198d99c3312557ef6121cf78c38281efe9b3bc88cba0e2c05446f38a024d/fido2-2.2.1-py3-none-any.whl'
+	'dlib-20.0.1.tar.gz::https://files.pythonhosted.org/packages/25/1e/17570a07f9db19014f5df9cc5de2b4acfb47834e9921e019372b51d7cc03/dlib-20.0.1.tar.gz'
+	'dbus_fast-5.2.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl::https://files.pythonhosted.org/packages/ac/d8/528ce993791bc06fb5bc8b8abef87f49240945302e858a1d6894073e7c54/dbus_fast-5.2.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl'
+	'setuptools-84.0.0-py3-none-any.whl::https://files.pythonhosted.org/packages/95/9c/c510029fc6ef33a6275cd2c5d3cecd6613dfd6aa401d57c54f1c18852ccf/setuptools-84.0.0-py3-none-any.whl'
+	'wheel-0.48.0-py3-none-any.whl::https://files.pythonhosted.org/packages/2e/29/69cfbb602cd91690c55d38ba9fe53e6a7e76a6fa647bf38f19c138d25449/wheel-0.48.0-py3-none-any.whl'
+	'dlib_face_recognition_resnet_model_v1.dat.bz2::https://github.com/davisking/dlib-models/raw/master/dlib_face_recognition_resnet_model_v1.dat.bz2'
+	'mmod_human_face_detector.dat.bz2::https://github.com/davisking/dlib-models/raw/master/mmod_human_face_detector.dat.bz2'
+	'shape_predictor_5_face_landmarks.dat.bz2::https://github.com/davisking/dlib-models/raw/master/shape_predictor_5_face_landmarks.dat.bz2'
+)
+sha256sums_x86_64=(
+	'72748da13197c1fb161e3afeef20a6a385ff24f2165e6e2758e47008e7faba4c'
+	'b7e18c623bb5c95acb3b3328861272816ba199fb531921c5d6d0b675f1fde9e3'
+	'09a872a157c1376ab922a69bbf22f9a95bcc7b658a9d8b436a60212b02b2eeb4'
+	'c1453022f490d2459a11819d83ad1d586e9ff65a12ac3e705ffebd46d3685dcf'
+	'b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992'
+	'ff838d62ec1bfce4f9ba7fa16f4a7b554cd8d0c299e6be37502161a660c84eef'
+	'ed397da981b9ab133da6ead7309e41f924b566b749956129efe286fae097749f'
+	'7cb2a09467de032332c743bc967007f016598c66c9c9ebc54a5b66d3d9e46d54'
+	'236327794a5957238e83c363809903b6a47d1f4fecd64831a29fd09458d90f0e'
+	'51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670'
+	'3217dcc807155e45db462d7ef2431f5ddda0d7273b700d05a67b271ceb1287ab'
+	'abb1f61041e434465855ce81c2bd546e830d28bcbed8d27ffbe5bb408b11553a'
+	'db9e9e40f092c118d5eb3e643935b216838170793559515541c56a2b50d9fc84'
+	'6e787bbebf5c9efdb793f6cd1f023230c4413306605f24f299f12869f95aa472'
+)
+source_aarch64=(
+	'cpython-3.12.14+20260901-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz::https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz'
+	'numpy-2.5.3-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl::https://files.pythonhosted.org/packages/f1/32/84146fc020ad3c25f805f70ab60da46fe3c540a21369754a7e4369754b6f/numpy-2.5.3-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl'
+	'opencv_python_headless-5.0.0.93-cp37-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl::https://files.pythonhosted.org/packages/ec/78/afca939f40ffe2b2380bfa86f812b2f7d4acc5a27b27dc41b49cad7ce7b4/opencv_python_headless-5.0.0.93-cp37-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl'
+	'cffi-2.1.1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.whl::https://files.pythonhosted.org/packages/44/de/f98430906df1545ffde0d543dd124a7a439bc2cd32b36b9c53f805df7333/cffi-2.1.1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.whl'
+	'pycparser-3.0-py3-none-any.whl::https://files.pythonhosted.org/packages/0c/c3/44f3fbbfa403ea2a7c779186dc20772604442dde72947e7d01069cbe98e3/pycparser-3.0-py3-none-any.whl'
+	'cryptography-50.0.1-cp311-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl::https://files.pythonhosted.org/packages/90/34/9ce9a62ed9dc82ca9fd6a34445b6904af56e5f38b3eae2ed32e49c36053d/cryptography-50.0.1-cp311-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl'
+	'fido2-2.2.1-py3-none-any.whl::https://files.pythonhosted.org/packages/71/84/198d99c3312557ef6121cf78c38281efe9b3bc88cba0e2c05446f38a024d/fido2-2.2.1-py3-none-any.whl'
+	'dlib-20.0.1.tar.gz::https://files.pythonhosted.org/packages/25/1e/17570a07f9db19014f5df9cc5de2b4acfb47834e9921e019372b51d7cc03/dlib-20.0.1.tar.gz'
+	'dbus_fast-5.2.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl::https://files.pythonhosted.org/packages/d2/81/3c3ab1c728e2493e6c01c2e652ed42a60821cc190c4a596d2405d3374812/dbus_fast-5.2.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl'
+	'setuptools-84.0.0-py3-none-any.whl::https://files.pythonhosted.org/packages/95/9c/c510029fc6ef33a6275cd2c5d3cecd6613dfd6aa401d57c54f1c18852ccf/setuptools-84.0.0-py3-none-any.whl'
+	'wheel-0.48.0-py3-none-any.whl::https://files.pythonhosted.org/packages/2e/29/69cfbb602cd91690c55d38ba9fe53e6a7e76a6fa647bf38f19c138d25449/wheel-0.48.0-py3-none-any.whl'
+	'dlib_face_recognition_resnet_model_v1.dat.bz2::https://github.com/davisking/dlib-models/raw/master/dlib_face_recognition_resnet_model_v1.dat.bz2'
+	'mmod_human_face_detector.dat.bz2::https://github.com/davisking/dlib-models/raw/master/mmod_human_face_detector.dat.bz2'
+	'shape_predictor_5_face_landmarks.dat.bz2::https://github.com/davisking/dlib-models/raw/master/shape_predictor_5_face_landmarks.dat.bz2'
+)
+sha256sums_aarch64=(
+	'577b4bec0793ad1ff0cbff9adbd0df078eddde38a4c41bf5d83ad381a85ee39d'
+	'76c2c1e6bfa5c84adc6434dfbf013aa92096a7985221762c8f11fedfd20fff58'
+	'10818d91510e05c04568ae12b5cd120779c70c01bf897b001a6221fe430df80f'
+	'68e62fe11f30d5ca8289242866f0a5291402d8529ca2178ab8afc5c9694ae890'
+	'b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992'
+	'53e279950892dc102c6b4e52af03ae5ea92fac572a1ddab78ca73a997f62b69f'
+	'ed397da981b9ab133da6ead7309e41f924b566b749956129efe286fae097749f'
+	'7cb2a09467de032332c743bc967007f016598c66c9c9ebc54a5b66d3d9e46d54'
+	'e5a0742c9c2bdae7599d1fff06a609cc7cf19d4a84bf7e6e2cea1d086d1ecc0b'
+	'51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670'
+	'3217dcc807155e45db462d7ef2431f5ddda0d7273b700d05a67b271ceb1287ab'
+	'abb1f61041e434465855ce81c2bd546e830d28bcbed8d27ffbe5bb408b11553a'
+	'db9e9e40f092c118d5eb3e643935b216838170793559515541c56a2b50d9fc84'
+	'6e787bbebf5c9efdb793f6cd1f023230c4413306605f24f299f12869f95aa472'
+)
+noextract=(
+	'cffi-2.1.1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.whl'
+	'cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl'
+	'cpython-3.12.14+20260901-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz'
+	'cpython-3.12.14+20260901-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz'
+	'cryptography-50.0.1-cp311-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl'
+	'cryptography-50.0.1-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl'
+	'dbus_fast-5.2.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl'
+	'dbus_fast-5.2.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl'
+	'dlib-20.0.1.tar.gz'
+	'fido2-2.2.1-py3-none-any.whl'
+	'numpy-2.5.3-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl'
+	'numpy-2.5.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl'
+	'opencv_python_headless-5.0.0.93-cp37-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl'
+	'opencv_python_headless-5.0.0.93-cp37-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl'
+	'pycparser-3.0-py3-none-any.whl'
+	'setuptools-84.0.0-py3-none-any.whl'
+	'wheel-0.48.0-py3-none-any.whl'
+)
+# END pinned sources
+
+pkgver() {
+	cd linux-hello
+	printf "%s.r%s.g%s" "$(cat VERSION)" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+}
+
+build() {
+	cd linux-hello
+	# makepkg has downloaded and verified everything into $srcdir
+	tools/build_runtime.sh --outdir "$srcdir/runtime" --download-dir "$srcdir" --offline
+
+	arch-meson . "$srcdir/build" \
+		-Dbundled_python_dir="$srcdir/runtime/linux-hello-runtime" \
+		-Ddlib_data_files="$srcdir"
+	meson compile -C "$srcdir/build"
+
+	cmake -B "$srcdir/build-kcm" -S kcm -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_BUILD_TYPE=None \
+		-DBUILD_TESTING=OFF
+	cmake --build "$srcdir/build-kcm"
+}
+
+package() {
+	meson install -C "$srcdir/build" --destdir "$pkgdir" --no-rebuild
+	DESTDIR="$pkgdir" cmake --install "$srcdir/build-kcm"
+	install -Dm644 linux-hello/NOTICE "$pkgdir/usr/share/licenses/$pkgname/NOTICE"
+}
