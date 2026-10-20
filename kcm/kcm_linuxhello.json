@@ -1,0 +1,10 @@
+{
+    "KPlugin": {
+        "Description": "Unlock your computer with your face",
+        "Icon": "linux-hello",
+        "Name": "Face Unlock"
+    },
+    "X-KDE-Keywords": "face,biometric,camera,infrared,IR,Windows Hello,Linux Hello,howdy,login,unlock,sudo,polkit",
+    "X-KDE-System-Settings-Parent-Category": "security-privacy",
+    "X-KDE-Weight": 40
+}
