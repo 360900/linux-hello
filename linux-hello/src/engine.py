@@ -349,7 +349,8 @@ class Engine:
 		stats = Stats()
 		hint = "Remove the old models first to switch to OpenVINO."
 		captured = []
-		last_capture = 0.0
+		# Not 0: the monotonic clock starts at boot
+		last_capture = float("-inf")
 
 		def report(state, face=None, darkness=None):
 			if on_progress is not None:
