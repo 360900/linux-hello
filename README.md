@@ -10,7 +10,8 @@ Face unlock for KDE Plasma, sudo and polkit.
 
 ## Requirements
 
-- KDE Plasma 6. Face unlock on the lock screen needs Plasma 6.8 or later.
+- KDE Plasma 6 on Wayland. Face unlock on the lock screen needs Plasma 6.8 or
+  later. X11 is not supported: any program there can read your keys.
 - A camera. An infrared (Windows Hello) camera works in the dark and is much
   harder to fool.
 
@@ -72,6 +73,8 @@ Remove a source install with `sudo tools/uninstall.sh`.
   (boltgolt/howdy#1109).
 - **SELinux (Fedora)**: if the camera fails, check the audit log for
   `linux-hello-daemon`.
+- **Keyboard remappers** (keyd, kanata, Steam Input): the Enter for sudo and
+  admin prompts is not seen, so those fall back to your password.
 
 ## Credits
 
