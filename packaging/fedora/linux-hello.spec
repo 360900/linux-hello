@@ -146,5 +146,9 @@ fi
 %{_datadir}/icons/hicolor/symbolic/apps/linux-hello-symbolic.svg
 %{_datadir}/linux-hello/
 %{_datadir}/polkit-1/actions/io.github.linuxhello.policy
-%{_docdir}/linux-hello/
+%{_docdir}/linux-hello/webauthn*.md
 %{_mandir}/man1/linux-hello-cli.1*
+
+%changelog
+* Tue Oct 20 2026 tarik <80833241+360900@users.noreply.github.com> - 0.1.0-0.1
+- New packaging: system service, System Settings page, bundled Python runtime
