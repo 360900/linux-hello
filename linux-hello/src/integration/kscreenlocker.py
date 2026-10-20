@@ -5,12 +5,16 @@
 
 import os
 import re
+import stat
 import tempfile
 
 GROUP = "[Greeter]"
 KEY = "Authenticator"
 FACE = "Face"
 PASSWORD = "Regular"
+
+# Far more than a real state file; a bigger one is not read
+MAX_SIZE = 64 * 1024
 
 
 def state_path(environ=None):
@@ -19,12 +23,28 @@ def state_path(environ=None):
 	return os.path.join(base, "kscreenlockerrc")
 
 
-def read_choice(path):
+def _read_lines(path):
+	"""
+	The file's lines, [] when missing. Root reads these files in every
+	user's home, so a link, FIFO or device there must not make it follow,
+	hang or read without end: OSError for anything but a small regular file.
+	"""
 	try:
-		with open(path) as file:
-			lines = file.read().splitlines()
+		descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
 	except FileNotFoundError:
-		return None
+		return []
+	try:
+		info = os.fstat(descriptor)
+		if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_SIZE:
+			raise OSError("not a small regular file: {}".format(path))
+		data = os.read(descriptor, MAX_SIZE + 1)
+	finally:
+		os.close(descriptor)
+	return data.decode("utf-8", "replace").splitlines()
+
+
+def read_choice(path):
+	lines = _read_lines(path)
 	group = None
 	for line in lines:
 		stripped = line.strip()
@@ -37,11 +57,7 @@ def read_choice(path):
 
 def set_choice(path, value):
 	"""Set [Greeter] Authenticator, leaving every other line as it was"""
-	try:
-		with open(path) as file:
-			lines = file.read().splitlines()
-	except FileNotFoundError:
-		lines = []
+	lines = _read_lines(path)
 
 	group = None
 	group_end = None

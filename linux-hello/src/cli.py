@@ -145,7 +145,11 @@ def cmd_doctor(client, args):
 	checks = client.call("Diagnose")[0]
 	if os.geteuid() != 0:
 		from integration import kscreenlocker
-		if kscreenlocker.read_choice(kscreenlocker.state_path()) == kscreenlocker.FACE and not kscreenlocker.face_enabled():
+		try:
+			stuck = kscreenlocker.read_choice(kscreenlocker.state_path()) == kscreenlocker.FACE
+		except OSError:
+			stuck = False
+		if stuck and not kscreenlocker.face_enabled():
 			kscreenlocker.stop_preferring_face()
 			checks.append(["lock-screen-choice", "warning",
 				_("Your lock screen started with Face while Face is off, which crashes it. Switched it back to the password.")])

@@ -1,5 +1,7 @@
 import os
 
+import pytest
+
 from integration import kscreenlocker
 
 
@@ -106,3 +108,25 @@ def test_as_user_runs_with_the_users_identity(tmp_path):
 	seen = []
 	assert kscreenlocker._as_user(me, lambda: seen.append(os.geteuid()))
 	assert seen == [os.getuid()]
+
+
+def test_traps_in_a_home_are_skipped(monkeypatch, tmp_path):
+	# Root reads these in every home: a FIFO must not hang it, a link to
+	# /dev/zero must not make it read forever, other links are not followed
+	entries = fake_users(monkeypatch, tmp_path, {"alice": None, "bob": None, "carol": None, "dave": "Face"})
+	os.mkfifo(entries[0][1])
+	os.symlink("/dev/zero", entries[1][1])
+	target = tmp_path / "elsewhere"
+	write(str(target), "[Greeter]\nAuthenticator=Face\n")
+	os.symlink(str(target), entries[2][1])
+
+	assert kscreenlocker.users_preferring_face() == ["dave"]
+	assert kscreenlocker.reset_all_users() == ["dave"]
+	assert "Face" in target.read_text()
+
+
+def test_huge_state_file_is_not_read(tmp_path):
+	path = str(tmp_path / "kscreenlockerrc")
+	write(path, "[Greeter]\nAuthenticator=Face\n" + "x" * (kscreenlocker.MAX_SIZE + 1))
+	with pytest.raises(OSError):
+		kscreenlocker.read_choice(path)
