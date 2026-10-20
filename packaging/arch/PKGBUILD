@@ -151,4 +151,8 @@ package() {
 	meson install -C "$srcdir/build" --destdir "$pkgdir" --no-rebuild
 	DESTDIR="$pkgdir" cmake --install "$srcdir/build-kcm"
 	install -Dm644 linux-hello/NOTICE "$pkgdir/usr/share/licenses/$pkgname/NOTICE"
+
+	# Bytecode for the paths it runs from, so nothing is written there later
+	"$pkgdir/usr/lib/linux-hello-runtime/python/bin/python3" -m compileall -q -j0 \
+		-s "$pkgdir" -p / "$pkgdir/usr/lib/linux-hello-runtime" "$pkgdir/usr/lib/linux-hello"
 }

@@ -151,9 +151,9 @@ fi
 DLIB_WHEEL="$(ls "${OUTDIR}"/dlib-wheel/dlib-*.whl 2>/dev/null || true)"
 
 echo ">> installing wheels into the runtime"
-"${PYBIN}" -m pip install --quiet --no-index --no-deps --target "$SITE" "${WHEELS[@]}"
+"${PYBIN}" -m pip install --quiet --no-index --no-deps --no-compile --target "$SITE" "${WHEELS[@]}"
 if [ "$BUILD_DLIB" = 1 ] && [ -n "$DLIB_WHEEL" ]; then
-    "${RUNTIME}/python/bin/pip" install --quiet --no-index --no-deps --target "$SITE" "$DLIB_WHEEL"
+    "${RUNTIME}/python/bin/pip" install --quiet --no-index --no-deps --no-compile --target "$SITE" "$DLIB_WHEEL"
 fi
 # The runtime ships without pip: it is fully managed by this script.
 rm -rf "${RUNTIME}/python/bin/pip" "${RUNTIME}/python/bin/pip3" \
@@ -181,7 +181,8 @@ rm -rf "$SITE/pip" "$SITE"/pip-*.dist-info
 # 4. Smoke test the assembled runtime
 # ---------------------------------------------------------------------------
 echo ">> smoke test"
-"${PYBIN}" - <<'EOF'
+# No bytecode: it would record build paths. Packages compile at install paths.
+"${PYBIN}" -B - <<'EOF'
 import sys
 print("python", sys.version.split()[0])
 import numpy
@@ -197,6 +198,9 @@ print("fido2 ok")
 import dbus_fast.aio
 print("dbus-fast ok")
 EOF
+
+# Bytecode written while building records build paths
+find "$RUNTIME" -depth -type d -name '__pycache__' -exec rm -rf {} +
 
 echo ">> runtime ready at ${RUNTIME}"
 du -sh "$RUNTIME"
