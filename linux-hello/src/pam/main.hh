@@ -17,6 +17,9 @@ enum CompareError : std::uint8_t {
   TOO_DARK = 13,
   INVALID_DEVICE = 14,
   RUBBERSTAMP = 15,
+  NOT_CONFIRMED = 16,
+  CONFIRM_PAUSED = 17,
+  SKIPPED = 18,
   CANCELLED = 250
 };
 

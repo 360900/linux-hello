@@ -61,8 +61,12 @@ def stacks(directory):
 			file.write(text)
 
 
-def authenticate(harness, confdir, service_name, bus_address):
+def authenticate(harness, confdir, service_name, bus_address, answer=None, tty=None):
 	env = dict(os.environ, DBUS_SYSTEM_BUS_ADDRESS=bus_address)
+	if answer is not None:
+		env["HARNESS_ANSWER"] = answer
+	if tty is not None:
+		env["HARNESS_TTY"] = tty
 	started = time.monotonic()
 	result = subprocess.run([harness, confdir, service_name, ME], capture_output=True, text=True, env=env, timeout=60)
 	return result, time.monotonic() - started
@@ -95,3 +99,122 @@ def test_missing_service_fails_fast(harness, tmp_path, private_bus):  # noqa: F8
 	result, seconds = authenticate(harness, str(tmp_path), "face", private_bus)
 	assert result.returncode == 1
 	assert seconds < 5
+
+
+# -- admin prompts and sudo: a face only counts after a physical Enter --------
+HINT = "Press Enter to use your face"
+# A prompt waiting for typed input; none of these may wait
+PROMPT = "message 1:"
+
+
+def confirming(service, pressed):  # noqa: F811
+	cli, _allowed, _root = service
+	import models as model_store
+	model_store.add(ME, "office", [[0.5, 0.5]], 1)
+	cli.managers[0].confirm = lambda cancel: pressed
+	return cli
+
+
+@pytest.mark.as_root
+def test_sudo_scans_after_enter(service, harness, tmp_path):  # noqa: F811
+	cli = confirming(service, "enter")
+	stacks(str(tmp_path))
+	result, _seconds = authenticate(harness, str(tmp_path), "sudo", cli.private_bus)
+	assert HINT in result.stdout and PROMPT not in result.stdout
+	# No terminal here, like a polkit dialog, so Esc is not offered
+	assert "Esc" not in result.stdout
+	assert "result: Success" in result.stdout
+
+
+@pytest.mark.as_root
+@pytest.mark.parametrize("pressed", ["nothing", "typing", "skip"])
+def test_without_enter_sign_in_goes_on(service, harness, tmp_path, pressed):  # noqa: F811
+	# Also when a program that started sudo itself answers every prompt
+	cli = confirming(service, pressed)
+	stacks(str(tmp_path))
+	result, _seconds = authenticate(harness, str(tmp_path), "sudo", cli.private_bus, answer="")
+	assert PROMPT not in result.stdout
+	# pam_deny, the stand-in for the password, had its turn
+	assert "result: Authentication failure" in result.stdout
+	assert cli.engine.verify_calls == []
+
+
+@pytest.mark.as_root
+def test_lock_screen_needs_no_enter(service, harness, tmp_path):  # noqa: F811
+	cli = confirming(service, "nothing")
+	stacks(str(tmp_path))
+	result, _seconds = authenticate(harness, str(tmp_path), "face", cli.private_bus)
+	assert HINT not in result.stdout
+	assert "result: Success" in result.stdout
+
+
+@pytest.mark.as_root
+def test_keys_in_the_window_stay_hidden_and_unread(service, harness, tmp_path):  # noqa: F811
+	# A password typed out of habit must not show, nor reach the next prompt
+	import termios
+
+	main, terminal = os.openpty()
+	try:
+		def typing(cancel):
+			time.sleep(0.3)
+			os.write(main, b"secret\n")
+			time.sleep(0.2)
+			return "typing"
+
+		cli = confirming(service, "nothing")
+		cli.managers[0].confirm = typing
+		stacks(str(tmp_path))
+		result, _seconds = authenticate(harness, str(tmp_path), "sudo", cli.private_bus, tty=os.ttyname(terminal))
+		assert HINT + ", or Esc to skip" in result.stdout
+
+		os.set_blocking(main, False)
+		try:
+			echoed = os.read(main, 1024)
+		except BlockingIOError:
+			echoed = b""
+		assert b"secret" not in echoed
+		os.set_blocking(terminal, False)
+		with pytest.raises(BlockingIOError):
+			os.read(terminal, 1024)
+		assert termios.tcgetattr(terminal)[3] & termios.ECHO
+	finally:
+		os.close(main)
+		os.close(terminal)
+
+
+@pytest.mark.as_root
+def test_a_key_the_terminal_passes_on_late_is_not_echoed(service, harness, tmp_path):  # noqa: F811
+	# The service reads the keyboard before the terminal app writes the key
+	import threading
+
+	main, terminal = os.openpty()
+	try:
+		def esc(cancel):
+			threading.Timer(0.05, lambda: os.write(main, b"\x1b")).start()
+			return "skip"
+
+		cli = confirming(service, "skip")
+		cli.managers[0].confirm = esc
+		stacks(str(tmp_path))
+		authenticate(harness, str(tmp_path), "sudo", cli.private_bus, tty=os.ttyname(terminal))
+		time.sleep(0.1)
+
+		os.set_blocking(main, False)
+		try:
+			echoed = os.read(main, 1024)
+		except BlockingIOError:
+			echoed = b""
+		assert b"^[" not in echoed and b"\x1b" not in echoed
+	finally:
+		os.close(main)
+		os.close(terminal)
+
+
+@pytest.mark.as_root
+def test_pause_is_announced(service, harness, tmp_path):  # noqa: F811
+	cli = confirming(service, "enter")
+	cli.managers[0].confirm_paused[ME] = time.monotonic() + 60
+	stacks(str(tmp_path))
+	result, _seconds = authenticate(harness, str(tmp_path), "sudo", cli.private_bus)
+	assert "Face is paused for a minute" in result.stdout and HINT not in result.stdout
+	assert "result: Authentication failure" in result.stdout

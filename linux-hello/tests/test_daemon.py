@@ -5,6 +5,7 @@ import pwd
 import shutil
 import subprocess
 import sys
+import time
 
 import numpy as np
 import pytest
@@ -473,6 +474,127 @@ def test_verify_now_neither_waits_nor_counts(env, monkeypatch):
 		run(manager.verify(caller(MY_UID), ME))
 	assert run(manager.verify_now(caller(MY_UID), ME))[0] == R.TIMEOUT_REACHED
 	assert len(engine.verify_calls) == 7
+
+
+def make_confirming(env, answers, results=()):
+	"""A manager whose keyboard watch sees answers in turn"""
+	from daemon.manager import Manager
+	from integration.pam import PamIntegration
+
+	engine = ScriptedEngine(results)
+	signals = []
+	watches = []
+
+	def confirm(cancel):
+		watches.append(cancel)
+		return answers.pop(0)
+
+	manager = Manager(FakeAccess(), lambda *args: signals.append(args), engine, PamIntegration(env), confirm)
+	return manager, engine, watches, signals
+
+
+def test_confirmed_verification_is_root_only(env):
+	from daemon.dispatch import Failed
+	import models as model_store
+
+	model_store.add(ME, "a", [[0.1]], 1)
+	manager, _engine, watches, _signals = make_confirming(env, ["enter"])
+	with pytest.raises(Failed) as error:
+		run(manager.verify_confirmed(caller(MY_UID), ME))
+	assert error.value.type.endswith("PermissionDenied")
+	assert watches == []
+
+
+def test_scan_only_after_enter(env):
+	import models as model_store
+	from verification import VerificationResult as R
+
+	model_store.add(ME, "a", [[0.1]], 1)
+	manager, engine, watches, signals = make_confirming(env, ["enter"], [R.SUCCESS])
+	assert run(manager.verify_confirmed(caller(0), ME))[0] == R.SUCCESS
+	assert len(watches) == 1 and len(engine.verify_calls) == 1
+	# The module asks for Enter only once the service listens for it
+	assert signals == [("ConfirmWindow", "s", [ME], ":1.42")]
+
+
+def test_running_out_three_times_pauses_face_for_elevation(env):
+	import models as model_store
+	from daemon import manager as manager_module
+	from verification import VerificationResult as R
+
+	for nobody_pressed in ("nothing", "typing"):
+		model_store.add(ME, "a", [[0.1]], 1)
+		manager, engine, watches, signals = make_confirming(env, [nobody_pressed] * 3 + ["enter"], [R.SUCCESS, R.SUCCESS])
+		for _ in range(3):
+			assert run(manager.verify_confirmed(caller(0), ME))[0] == R.NOT_CONFIRMED
+		# A program trying again right away gets no scan, no keyboard watch
+		# and no window to show
+		assert run(manager.verify_confirmed(caller(0), ME))[0] == R.CONFIRM_PAUSED
+		assert len(watches) == 3 and len(signals) == 3 and engine.verify_calls == []
+		# Unlocking and tests are not affected
+		assert run(manager.verify(caller(0), ME))[0] == R.SUCCESS
+
+		# A minute later
+		assert manager.confirm_paused[ME] - time.monotonic() > manager_module.CONFIRM_PAUSE_SECONDS - 5
+		manager.confirm_paused[ME] = time.monotonic()
+		assert run(manager.verify_confirmed(caller(0), ME))[0] == R.SUCCESS
+
+
+def test_letting_the_window_pass_now_and_then_never_pauses(env):
+	import models as model_store
+	from verification import VerificationResult as R
+
+	model_store.add(ME, "a", [[0.1]], 1)
+	manager, _engine, _watches, _signals = make_confirming(env, ["nothing", "nothing", "enter", "nothing", "nothing"], [R.SUCCESS])
+	results = [run(manager.verify_confirmed(caller(0), ME))[0] for _ in range(5)]
+	# Enter in between starts the count over
+	assert results == [R.NOT_CONFIRMED, R.NOT_CONFIRMED, R.SUCCESS, R.NOT_CONFIRMED, R.NOT_CONFIRMED]
+
+	# Misses older than the pause do not count
+	manager.confirm_misses[ME] = [time.monotonic() - 120] * 2
+	manager.confirm = lambda cancel: "nothing"
+	assert run(manager.verify_confirmed(caller(0), ME))[0] == R.NOT_CONFIRMED
+	assert run(manager.verify_confirmed(caller(0), ME))[0] == R.NOT_CONFIRMED
+
+
+def test_killed_requests_count_too(env):
+	# A program starts sudo and kills it before the window runs out, again
+	# and again, hoping to keep a window open for a lone Enter
+	import models as model_store
+	from verification import VerificationResult as R
+
+	model_store.add(ME, "a", [[0.1]], 1)
+	manager, engine, watches, _signals = make_confirming(env, [])
+
+	def killed(cancel):
+		watches.append(cancel)
+		cancel.set()
+		return "nothing"
+
+	manager.confirm = killed
+	for _ in range(3):
+		run(manager.verify_confirmed(caller(0), ME))
+	assert run(manager.verify_confirmed(caller(0), ME))[0] == R.CONFIRM_PAUSED
+	assert len(watches) == 3 and engine.verify_calls == []
+
+
+def test_esc_skips_without_pausing(env):
+	import models as model_store
+	from verification import VerificationResult as R
+
+	model_store.add(ME, "a", [[0.1]], 1)
+	manager, engine, _watches, _signals = make_confirming(env, ["skip", "enter"], [R.SUCCESS])
+	assert run(manager.verify_confirmed(caller(0), ME))[0] == R.SKIPPED
+	assert engine.verify_calls == []
+	assert run(manager.verify_confirmed(caller(0), ME))[0] == R.SUCCESS
+
+
+def test_no_face_no_keyboard_watch(env):
+	from verification import VerificationResult as R
+
+	manager, _engine, watches, signals = make_confirming(env, ["enter"])
+	assert run(manager.verify_confirmed(caller(0), ME))[0] == R.NO_FACE_MODEL
+	assert watches == [] and signals == []
 
 
 def test_root_callers_never_pause(env, monkeypatch):

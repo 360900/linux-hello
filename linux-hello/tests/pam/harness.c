@@ -2,7 +2,8 @@
  * directory, so the module can be tested without touching /etc/pam.d.
  * Usage: harness <confdir> <service> <user>
  * Prints the PAM result name and every conversation message, answers
- * password prompts with "wrong-password". */
+ * password prompts with $HARNESS_ANSWER, "wrong-password" by default.
+ * $HARNESS_TTY becomes PAM_TTY. */
 #include <security/pam_appl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,11 +12,12 @@
 static int conversation(int count, const struct pam_message **messages,
                         struct pam_response **responses, void *data) {
 	(void)data;
+	const char *answer = getenv("HARNESS_ANSWER");
 	*responses = calloc((size_t)count, sizeof(struct pam_response));
 	for (int i = 0; i < count; i++) {
 		printf("message %d: %s\n", messages[i]->msg_style, messages[i]->msg);
 		if (messages[i]->msg_style == PAM_PROMPT_ECHO_OFF) {
-			(*responses)[i].resp = strdup("wrong-password");
+			(*responses)[i].resp = strdup(answer != NULL ? answer : "wrong-password");
 		}
 	}
 	fflush(stdout);
@@ -33,6 +35,9 @@ int main(int argc, char **argv) {
 	if (result != PAM_SUCCESS) {
 		printf("start: %s\n", pam_strerror(handle, result));
 		return 1;
+	}
+	if (getenv("HARNESS_TTY") != NULL) {
+		pam_set_item(handle, PAM_TTY, getenv("HARNESS_TTY"));
 	}
 	result = pam_authenticate(handle, 0);
 	printf("result: %s\n", pam_strerror(handle, result));

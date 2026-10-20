@@ -15,6 +15,7 @@ from dbus_fast import Variant
 import models as model_store
 import paths_factory
 import settings
+from daemon import confirm as confirm_module
 from daemon.access import ACTION_CONFIGURE, ACTION_ENROLL_SELF, ACTION_MANAGE_USERS, ACTION_PREVIEW
 from daemon.dispatch import Failed
 from engine import Engine
@@ -34,13 +35,22 @@ STREAK_SECONDS = 30.0
 # Longest wait per request, below the PAM module's call timeout
 PAUSE_SECONDS = 25.0
 
+# After this many admin prompt or sudo requests ran out without Enter within
+# CONFIRM_PAUSE_SECONDS, such requests get no face scan for that long. A
+# program trying again and again in the background hoping for a lone Enter
+# gets a few tries every minute or two; a person letting the window pass to
+# use a fingerprint does not get there. Esc only comes from a person, so it
+# counts for nothing.
+CONFIRM_MISSES = 3
+CONFIRM_PAUSE_SECONDS = 60.0
+
 # The picture the settings page shows while scanning
 PREVIEW_FPS = 12
 PREVIEW_QUALITY = 70
 
 
 class Manager:
-	def __init__(self, access, emit, engine=None, pam=None):
+	def __init__(self, access, emit, engine=None, pam=None, confirm=None):
 		self.access = access
 		self.emit = emit
 		self.engine = engine or Engine(settings.load())
@@ -50,12 +60,19 @@ class Manager:
 		self.running = {}
 		# user -> (failed scans in a row, monotonic time of the last one)
 		self.failures = {}
+		# (cancel event) -> what a person pressed, see daemon/confirm.py
+		self.confirm = confirm or confirm_module.wait_for_enter
+		# user -> monotonic times of recent requests that ran out without Enter
+		self.confirm_misses = {}
+		# user -> monotonic time until which face is paused for elevation
+		self.confirm_paused = {}
 
 	def methods(self):
 		return {
 			"GetStatus": ("", "a{sv}", self.get_status),
 			"Verify": ("s", "ud", self.verify),
 			"VerifyNow": ("s", "ud", self.verify_now),
+			"VerifyConfirmed": ("s", "ud", self.verify_confirmed),
 			"Enroll": ("ss", "uu", self.enroll),
 			"Cancel": ("", "", self.cancel),
 			"ListModels": ("s", "a(uxs)", self.list_models),
@@ -187,6 +204,53 @@ class Manager:
 		# Only someone at the computer gets to see the camera picture.
 		preview = await self.access.authorized(caller, ACTION_PREVIEW)
 		return await self.verify(caller, user, pausable=False, preview=preview)
+
+	async def verify_confirmed(self, caller, user):
+		# Admin prompts and sudo, from the PAM module running as root in sudo
+		# or polkit's helper: the scan starts only after a person pressed
+		# Enter, see daemon/confirm.py. ConfirmWindow tells the caller when
+		# to ask for it.
+		if caller.uid != 0:
+			raise Failed("PermissionDenied", "Only root may ask for a confirmed verification")
+		self._check_user(user)
+		try:
+			has_models = bool(model_store.load(user))
+		except model_store.ModelError:
+			has_models = False
+		if not has_models:
+			return [int(VerificationResult.NO_FACE_MODEL), -1.0]
+		if time.monotonic() < self.confirm_paused.get(user, float("-inf")):
+			return [int(VerificationResult.CONFIRM_PAUSED), -1.0]
+
+		cancel = threading.Event()
+		self.running[caller.sender] = cancel
+		try:
+			self.emit("ConfirmWindow", "s", [user], caller.sender)
+			pressed = await asyncio.to_thread(self.confirm, cancel)
+		finally:
+			self.running.pop(caller.sender, None)
+		if pressed == confirm_module.SKIP:
+			return [int(VerificationResult.SKIPPED), -1.0]
+		if pressed != confirm_module.ENTER:
+			# Also when the caller left: a program starting and killing sudo
+			# over and over must not keep a window open without counting
+			self._confirm_missed(user)
+			return [int(VerificationResult.NOT_CONFIRMED), -1.0]
+		if cancel.is_set():
+			return [int(VerificationResult.CANCELLED), -1.0]
+		self.confirm_misses.pop(user, None)
+		return await self.verify(caller, user, pausable=False)
+
+	def _confirm_missed(self, user):
+		now = time.monotonic()
+		misses = [t for t in self.confirm_misses.get(user, []) if now - t < CONFIRM_PAUSE_SECONDS] + [now]
+		if len(misses) < CONFIRM_MISSES:
+			self.confirm_misses[user] = misses
+			return
+		self.confirm_misses.pop(user, None)
+		self.confirm_paused[user] = now + CONFIRM_PAUSE_SECONDS
+		log.info("%d elevation requests for %s ended without Enter, no face scans for them for %ds",
+			CONFIRM_MISSES, user, CONFIRM_PAUSE_SECONDS)
 
 	def _streak(self, user):
 		count, last = self.failures.get(user, (0, 0.0))

@@ -2,6 +2,7 @@
 #define DAEMON_CLIENT_H_
 
 #include <atomic>
+#include <functional>
 #include <string>
 
 /**
@@ -10,6 +11,10 @@
  * cancel() may be called from any other thread and makes run() return
  * within a fraction of a second. Closing the connection on cancel tells
  * the service to stop scanning and release the camera.
+ *
+ * method is Verify, or VerifyConfirmed for admin prompts and sudo. For the
+ * latter, on_window runs (on the calling thread) when the service starts
+ * waiting for Enter.
  */
 class VerifyRequest {
 public:
@@ -22,10 +27,14 @@ public:
     Failed       // anything else, see error()
   };
 
-  VerifyRequest(std::string user, unsigned timeout_seconds);
+  VerifyRequest(std::string user, unsigned timeout_seconds,
+                std::string method = "Verify");
 
   auto run() -> Status;
   void cancel();
+  void on_window(std::function<void()> callback) {
+    on_window_ = std::move(callback);
+  }
 
   /** The service's result code, the compare status codes in main.hh */
   [[nodiscard]] auto result() const -> unsigned { return result_; }
@@ -35,6 +44,8 @@ public:
 
 private:
   std::string user_;
+  std::string method_;
+  std::function<void()> on_window_;
   unsigned timeout_seconds_;
   std::atomic<bool> cancelled_{false};
   unsigned result_{0};

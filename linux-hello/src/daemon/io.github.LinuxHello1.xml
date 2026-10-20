@@ -27,6 +27,17 @@
       <arg name="certainty" type="d" direction="out"/>
     </method>
 
+    <!-- Verify for admin prompts and sudo, root only: the scan starts after
+         Enter on a physical keyboard (daemon/confirm.py). ConfirmWindow is
+         sent to the caller when that wait starts. Without Enter: 16, and
+         after 3 of those within a minute 17 for a minute without waiting;
+         18 when skipped with Esc. -->
+    <method name="VerifyConfirmed">
+      <arg name="user" type="s" direction="in"/>
+      <arg name="result" type="u" direction="out"/>
+      <arg name="certainty" type="d" direction="out"/>
+    </method>
+
     <!-- Verify for a scan the user started (a test, a passkey prompt): it
          never waits out the lock screen's pause and does not count toward it.
          Same access rule as Verify. -->
@@ -117,6 +128,10 @@
     <signal name="Preview">
       <arg name="user" type="s"/>
       <arg name="jpeg" type="ay"/>
+    </signal>
+    <!-- The wait for Enter of VerifyConfirmed started, sent to its caller -->
+    <signal name="ConfirmWindow">
+      <arg name="user" type="s"/>
     </signal>
     <signal name="ModelsChanged">
       <arg name="user" type="s"/>

@@ -52,6 +52,16 @@ def service(fake_paths, private_bus, tmp_path, request):  # noqa: F811
 		async def authorized(self, caller, action):
 			return caller.uid == 0 or action in allowed
 
+	if request.node.get_closest_marker("as_root"):
+		class RootAccess(Access):
+			async def resolve(self, sender):
+				# Like the PAM module in sudo or polkit's helper
+				caller = await super().resolve(sender)
+				caller.uid = 0
+				return caller
+
+		request.getfixturevalue("monkeypatch").setattr(linux_hello_daemon, "Access", RootAccess)
+
 	engine = WaitingEngine() if request.node.get_closest_marker("waiting_engine") else FakeEngine()
 	managers = []
 

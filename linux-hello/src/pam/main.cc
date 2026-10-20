@@ -9,8 +9,11 @@
 #include <sys/syslog.h>
 #include <sys/types.h>
 #include <syslog.h>
+#include <fcntl.h>
+#include <termios.h>
 #include <unistd.h>
 
+#include <array>
 #include <chrono>
 #include <condition_variable>
 #include <cstring>
@@ -36,6 +39,15 @@
 const auto DEFAULT_TIMEOUT =
     std::chrono::duration<int, std::chrono::milliseconds::period>(100);
 const auto MAX_RETRIES = 5;
+
+// Services that unlock or start the user's own session. Every other service
+// (sudo, su, polkit, run0, anything unknown) grants more than that, so a
+// face only counts there after a physical Enter press, see needs_confirmation
+const std::array<const char *, 15> SESSION_SERVICES = {
+    "kde",         "kde-fingerprint", "kde-face",      "kscreensaver",
+    "plasmalogin", "sddm",            "login",         "gdm-password",
+    "lightdm",     "greetd",          "xscreensaver",  "swaylock",
+    "hyprlock",    "i3lock",          "sddm-greeter"};
 
 // RAII guard to ensure closelog() is called when identify() returns,
 // regardless of which early-return path is taken.
@@ -184,6 +196,155 @@ auto check_enabled(const LayeredConfig &config, const char *username) -> int {
 }
 
 /**
+ * Seconds the service may take: the scan timeout plus time for a cold start
+ * (loading the recognition models) and for opening the camera
+ */
+auto service_timeout(const LayeredConfig &config) -> unsigned {
+  double scan_timeout = 4;
+  try {
+    scan_timeout = std::stod(config.GetString("video", "timeout", "4"));
+  } catch (const std::exception &) {
+  }
+  return static_cast<unsigned>(scan_timeout) + 30;
+}
+
+/**
+ * Whether a face may only be used after Enter on a physical keyboard.
+ *
+ * A face match shows that someone is in front of the camera, not that they
+ * want what is asked. Any program running as the user can start sudo in a
+ * pseudo-terminal or replace the polkit agent and answer the prompt itself,
+ * so for everything that elevates the service also waits for a key press no
+ * such program can produce (daemon/confirm.py).
+ */
+auto needs_confirmation(pam_handle_t *pamh, const LayeredConfig &config,
+                        bool no_password) -> bool {
+  // A stack without a password prompt only unlocks the lock screen
+  if (no_password || !config.GetBoolean("core", "confirm_elevation", true)) {
+    return false;
+  }
+  const void *service = nullptr;
+  if (pam_get_item(pamh, PAM_SERVICE, &service) != PAM_SUCCESS ||
+      service == nullptr) {
+    return true;
+  }
+  for (const char *session : SESSION_SERVICES) {
+    if (strcmp(session, static_cast<const char *>(service)) == 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Keeps keys pressed during the face window off the screen and out of the
+ * next prompt, like sudo does for its own: echo off while the window runs,
+ * unread input dropped after it. Only for a terminal (sudo, su); polkit
+ * dialogs have none.
+ */
+class QuietTerminal {
+  static constexpr useconds_t TERMINAL_CATCH_UP_USEC = 200 * 1000;
+
+public:
+  explicit QuietTerminal(pam_handle_t *pamh) {
+    const void *item = nullptr;
+    if (pam_get_item(pamh, PAM_TTY, &item) != PAM_SUCCESS || item == nullptr) {
+      return;
+    }
+    std::string tty(static_cast<const char *>(item));
+    if (tty.rfind("/dev/", 0) != 0) {
+      tty = "/dev/" + tty;
+    }
+    fd_ = open(tty.c_str(), O_RDWR | O_NOCTTY | O_CLOEXEC);
+    if (fd_ >= 0 && (isatty(fd_) == 0 || tcgetattr(fd_, &saved_) != 0)) {
+      close(fd_);
+      fd_ = -1;
+    }
+  }
+  QuietTerminal(const QuietTerminal &) = delete;
+  auto operator=(const QuietTerminal &) -> QuietTerminal & = delete;
+
+  void start() {
+    if (fd_ < 0 || started_) {
+      return;
+    }
+    termios quiet = saved_;
+    quiet.c_lflag &= ~(ECHO | ECHONL);
+    started_ = tcsetattr(fd_, TCSANOW, &quiet) == 0;
+  }
+
+  [[nodiscard]] auto is_terminal() const -> bool { return fd_ >= 0; }
+
+  ~QuietTerminal() {
+    if (fd_ < 0) {
+      return;
+    }
+    if (started_) {
+      // The service sees a key on the keyboard before the terminal app
+      // passes it on; let it arrive so it is dropped, not echoed later
+      usleep(TERMINAL_CATCH_UP_USEC);
+      tcflush(fd_, TCIFLUSH);
+      tcsetattr(fd_, TCSANOW, &saved_);
+    }
+    close(fd_);
+  }
+
+private:
+  int fd_{-1};
+  bool started_{false};
+  termios saved_{};
+};
+
+/**
+ * Admin prompts and sudo: for a few seconds the service waits for Enter on a
+ * physical keyboard and only then scans. Nothing waits for typed input, so
+ * without Enter the stack goes on as if this module were not there.
+ */
+auto identify_confirmed(pam_handle_t *pamh, char *username,
+                        const LayeredConfig &config,
+                        const std::function<int(int, const char *)> &conv_function)
+    -> int {
+  QuietTerminal terminal(pamh);
+  // Esc would close a polkit dialog, so it is only offered in a terminal
+  const char *hint = terminal.is_terminal()
+                         ? S("Press Enter to use your face, or Esc to skip")
+                         : S("Press Enter to use your face");
+
+  // The service waits up to 3 seconds for Enter before scanning
+  VerifyRequest request(username, service_timeout(config) + 5,
+                        "VerifyConfirmed");
+  request.on_window([&] {
+    terminal.start();
+    conv_function(PAM_TEXT_INFO, hint);
+  });
+  auto status = request.run();
+  unsigned result = request.result();
+
+  if (status != VerifyRequest::Status::Answered) {
+    syslog(LOG_ERR, "Confirmed face verification failed: %s",
+           request.error().c_str());
+    return PAM_AUTHINFO_UNAVAIL;
+  }
+  switch (result) {
+  case 0:
+    return linux_hello_status(username, result, config, conv_function);
+  case CompareError::SKIPPED:
+    syslog(LOG_INFO, "Face skipped with Esc");
+    return PAM_IGNORE;
+  case CompareError::NOT_CONFIRMED:
+    syslog(LOG_NOTICE, "Face not used, Enter was not pressed alone in time");
+    return PAM_IGNORE;
+  case CompareError::CONFIRM_PAUSED:
+    syslog(LOG_NOTICE,
+           "Face not offered, paused after requests without Enter");
+    conv_function(PAM_TEXT_INFO, S("Face is paused for a minute"));
+    return PAM_IGNORE;
+  default:
+    return linux_hello_error(result, conv_function);
+  }
+}
+
+/**
  * The main function, runs the identification and authentication
  * @param  pamh     The handle to interface directly with PAM
  * @param  flags    Flags passed on to us by PAM, XORed
@@ -263,6 +424,14 @@ auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
   bindtextdomain(GETTEXT_PACKAGE, LOCALEDIR);
   textdomain(GETTEXT_PACKAGE);
 
+  if (needs_confirmation(pamh, config, no_password)) {
+    // Not as a session module: there is no prompt to confirm with
+    if (!ask_auth_tok) {
+      return PAM_IGNORE;
+    }
+    return identify_confirmed(pamh, username, config, conv_function);
+  }
+
   if (config.GetBoolean("core", "detection_notice", true)) {
     if ((conv_function(PAM_TEXT_INFO, S("Attempting facial authentication"))) !=
         PAM_SUCCESS) {
@@ -270,14 +439,7 @@ auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
     }
   }
 
-  // The service gets the scan timeout plus time for a cold start (loading
-  // the recognition models) and for opening the camera
-  double scan_timeout = 4;
-  try {
-    scan_timeout = std::stod(config.GetString("video", "timeout", "4"));
-  } catch (const std::exception &) {
-  }
-  VerifyRequest request(username, static_cast<unsigned>(scan_timeout) + 30);
+  VerifyRequest request(username, service_timeout(config));
 
   // NOTE: We should replace mutex and condition_variable by atomic wait, but
   // it's too recent (C++20)

@@ -51,6 +51,15 @@ auto on_reply(sd_bus_message *message, void *userdata,
   return 0;
 }
 
+auto on_window_signal(sd_bus_message * /*message*/, void *userdata,
+                      sd_bus_error * /*ret_error*/) -> int {
+  auto *callback = static_cast<std::function<void()> *>(userdata);
+  if (*callback) {
+    (*callback)();
+  }
+  return 0;
+}
+
 auto unavailable(const std::string &name) -> bool {
   return name == SD_BUS_ERROR_SERVICE_UNKNOWN ||
          name == SD_BUS_ERROR_NAME_HAS_NO_OWNER ||
@@ -62,8 +71,10 @@ auto unavailable(const std::string &name) -> bool {
 
 } // namespace
 
-VerifyRequest::VerifyRequest(std::string user, unsigned timeout_seconds)
-    : user_(std::move(user)), timeout_seconds_(timeout_seconds) {}
+VerifyRequest::VerifyRequest(std::string user, unsigned timeout_seconds,
+                             std::string method)
+    : user_(std::move(user)), method_(std::move(method)),
+      timeout_seconds_(timeout_seconds) {}
 
 void VerifyRequest::cancel() { cancelled_ = true; }
 
@@ -78,13 +89,28 @@ auto VerifyRequest::run() -> Status {
 
   sd_bus_set_method_call_timeout(bus, uint64_t{timeout_seconds_} * 1000000);
 
+  // Sent only to this connection, before the reply
+  sd_bus_slot *window_slot = nullptr;
+  if (on_window_) {
+    r = sd_bus_match_signal(bus, &window_slot, BUS_NAME, OBJECT_PATH,
+                            INTERFACE, "ConfirmWindow", on_window_signal,
+                            &on_window_);
+    if (r < 0) {
+      error_ = std::string("cannot watch for the confirmation window: ") +
+               std::strerror(-r);
+      sd_bus_flush_close_unref(bus);
+      return Status::Failed;
+    }
+  }
+
   Reply reply;
   sd_bus_slot *slot = nullptr;
   r = sd_bus_call_method_async(bus, &slot, BUS_NAME, OBJECT_PATH, INTERFACE,
-                               "Verify", on_reply, &reply, "s",
+                               method_.c_str(), on_reply, &reply, "s",
                                user_.c_str());
   if (r < 0) {
     error_ = std::string("cannot send the request: ") + std::strerror(-r);
+    sd_bus_slot_unref(window_slot);
     sd_bus_flush_close_unref(bus);
     return Status::Failed;
   }
@@ -93,6 +119,7 @@ auto VerifyRequest::run() -> Status {
     if (cancelled_) {
       // Closing the connection makes the service cancel the scan
       sd_bus_slot_unref(slot);
+      sd_bus_slot_unref(window_slot);
       sd_bus_flush_close_unref(bus);
       return Status::Cancelled;
     }
@@ -100,6 +127,7 @@ auto VerifyRequest::run() -> Status {
     if (r < 0) {
       error_ = std::string("bus error: ") + std::strerror(-r);
       sd_bus_slot_unref(slot);
+      sd_bus_slot_unref(window_slot);
       sd_bus_flush_close_unref(bus);
       return Status::Failed;
     }
@@ -110,12 +138,14 @@ auto VerifyRequest::run() -> Status {
     if (r < 0 && r != -EINTR) {
       error_ = std::string("bus error: ") + std::strerror(-r);
       sd_bus_slot_unref(slot);
+      sd_bus_slot_unref(window_slot);
       sd_bus_flush_close_unref(bus);
       return Status::Failed;
     }
   }
 
   sd_bus_slot_unref(slot);
+  sd_bus_slot_unref(window_slot);
   sd_bus_flush_close_unref(bus);
 
   if (!reply.error_name.empty()) {

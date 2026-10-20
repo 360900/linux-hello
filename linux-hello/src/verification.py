@@ -18,6 +18,11 @@ class VerificationResult(enum.IntEnum):
 	TOO_DARK = 13
 	INVALID_DEVICE = 14
 	RUBBERSTAMP = 15
+	# VerifyConfirmed: no Enter in time or typing, of which 3 within a
+	# minute pause face for a minute; then paused; or skipped with Esc
+	NOT_CONFIRMED = 16
+	CONFIRM_PAUSED = 17
+	SKIPPED = 18
 	CANCELLED = 250
 	# Not produced by the service: it could not be asked or did not answer
 	UNKNOWN_ERROR = 251

@@ -32,6 +32,7 @@ py_sources = [
     'client.py',
     'daemon/__init__.py',
     'daemon/access.py',
+    'daemon/confirm.py',
     'daemon/dispatch.py',
     'daemon/io.github.LinuxHello1.xml',
     'daemon/manager.py',
