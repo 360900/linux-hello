@@ -119,16 +119,16 @@ install_data(
 install_data('config.ini', install_dir: datadir, install_mode: 'rw-r--r--', install_tag: 'config')
 install_data('emitter-devices.json', install_dir: datadir, install_mode: 'rw-r--r--', install_tag: 'config')
 
-install_data('dlib-data/install.sh', 'dlib-data/Readme.md', install_dir: dlibdatadir, install_mode: 'rwxr--r--')
-
 # Ship the face recognition data with the package instead of downloading
-# it after install
+# it after install; builds without it get the download script
 if get_option('dlib_data_files') != ''
     dlib_files = []
     foreach name : ['dlib_face_recognition_resnet_model_v1.dat', 'mmod_human_face_detector.dat', 'shape_predictor_5_face_landmarks.dat']
         dlib_files += get_option('dlib_data_files') / name
     endforeach
     install_data(dlib_files, install_dir: dlibdatadir, install_mode: 'rw-r--r--', install_tag: 'dlib_data')
+else
+    install_data('dlib-data/install.sh', 'dlib-data/Readme.md', install_dir: dlibdatadir, install_mode: 'rwxr--r--')
 endif
 
 install_data(
@@ -139,49 +139,6 @@ install_data(
 )
 
 install_man('../linux-hello-cli.1')
-
-# if get_option('fetch_dlib_data')
-#     downloader = find_program('wget')
-#     bunzip2 = find_program('bunzip2')
-
-#     links = [ 
-#         'https://github.com/davisking/dlib-models/raw/master/dlib_face_recognition_resnet_model_v1.dat.bz2',
-#         'https://github.com/davisking/dlib-models/raw/master/mmod_human_face_detector.dat.bz2',
-#         'https://github.com/davisking/dlib-models/raw/master/shape_predictor_5_face_landmarks.dat.bz2'
-#     ]
-
-#     archived_model_files = [
-#         'dlib_face_recognition_resnet_model_v1.dat.bz2',
-#         'shape_predictor_5_face_landmarks.dat.bz2',
-#         'mmod_human_face_detector.dat.bz2'
-#     ]
-
-#     download = run_command(
-#         'download',
-#         links,
-#         output: archived_model_files,
-#         command: [downloader, '-O', '@OUTPUT@', '@INPUT@']
-#     )
-
-#     model_files = [
-#         'dlib_face_recognition_resnet_model_v1.dat',
-#         'shape_predictor_5_face_landmarks.dat',
-#         'mmod_human_face_detector.dat'
-#     ]
-
-#     models = custom_target(
-#         'models',
-#         input: archived_model_files,
-#         output: model_files,
-#         command: [bunzip2, '-k', '@INPUT@'],
-#     )
-
-#     install_data(
-#         model_files,
-#         install_dir: join_paths(get_option('prefix'), get_option('libdir'), 'dlib_models'),
-#     )
-
-# endif
 
 cli_path = join_paths(pysourcesinstalldir, 'cli.py')
 conf_data = configuration_data({ 'script_path': cli_path, 'python_path': py_full_path })
