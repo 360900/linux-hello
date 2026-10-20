@@ -116,6 +116,24 @@ KCM.SimpleKCM {
         }
 
         SettingCheckBox {
+            id: confirmElevation
+            Kirigami.FormData.label: i18n("Admin prompts and sudo:")
+            section: "core"
+            key: "confirm_elevation"
+            text: i18nc("@option:check", "Press Enter before the face scan")
+        }
+        QQC2.Label {
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 24
+            text: confirmElevation.checked
+                ? i18n("Only a key press on this computer's keyboard starts the scan, so other programs cannot use your face to get administrator rights.")
+                : i18n("Any program you run can get administrator rights while you are in front of the camera.")
+            wrapMode: Text.Wrap
+            font: Kirigami.Theme.smallFont
+            color: confirmElevation.checked ? Kirigami.Theme.textColor : Kirigami.Theme.negativeTextColor
+            opacity: confirmElevation.checked ? 0.7 : 1
+        }
+
+        SettingCheckBox {
             Kirigami.FormData.label: i18n("Skip face unlock:")
             section: "core"
             key: "abort_if_ssh"

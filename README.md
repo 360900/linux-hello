@@ -3,6 +3,7 @@
 Face unlock for KDE Plasma, sudo and polkit.
 
 - Unlocks the Plasma lock screen, approves polkit prompts and sudo with your face.
+- Admin prompts and sudo scan only after you press Enter, so other programs can't use your face.
 - Prefers the infrared camera and switches its IR light on by itself.
 - Set up in System Settings. No terminal, no config files.
 - Your password always keeps working.

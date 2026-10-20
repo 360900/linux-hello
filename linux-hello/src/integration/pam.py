@@ -67,12 +67,12 @@ TARGETS = [
 	{
 		"id": "admin",
 		"label": "Admin prompts",
-		"description": "Approve polkit prompts, including run0, with your face.",
+		"description": "Approve polkit prompts, including run0, with your face after pressing Enter.",
 	},
 	{
 		"id": "sudo",
 		"label": "Terminal (sudo)",
-		"description": "Authenticate sudo in a terminal with your face.",
+		"description": "Authenticate sudo in a terminal with your face after pressing Enter.",
 	},
 	{
 		"id": "login",
