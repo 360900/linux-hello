@@ -116,5 +116,23 @@
       "mmod_human_face_detector.dat.bz2": "db9e9e40f092c118d5eb3e643935b216838170793559515541c56a2b50d9fc84",
       "shape_predictor_5_face_landmarks.dat.bz2": "6e787bbebf5c9efdb793f6cd1f023230c4413306605f24f299f12869f95aa472"
     }
+  },
+  "build_packages": {
+    "setuptools": {
+      "version": "84.0.0",
+      "any": {
+        "url": "https://files.pythonhosted.org/packages/95/9c/c510029fc6ef33a6275cd2c5d3cecd6613dfd6aa401d57c54f1c18852ccf/setuptools-84.0.0-py3-none-any.whl",
+        "sha256": "51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670",
+        "filename": "setuptools-84.0.0-py3-none-any.whl"
+      }
+    },
+    "wheel": {
+      "version": "0.48.0",
+      "any": {
+        "url": "https://files.pythonhosted.org/packages/2e/29/69cfbb602cd91690c55d38ba9fe53e6a7e76a6fa647bf38f19c138d25449/wheel-0.48.0-py3-none-any.whl",
+        "sha256": "3217dcc807155e45db462d7ef2431f5ddda0d7273b700d05a67b271ceb1287ab",
+        "filename": "wheel-0.48.0-py3-none-any.whl"
+      }
+    }
   }
 }

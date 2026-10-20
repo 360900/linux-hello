@@ -14,7 +14,11 @@
 # from its own package repositories.
 #
 # Usage: tools/build_runtime.sh [--outdir DIR] [--arch x86_64|aarch64] [--no-dlib]
-# Requires: curl (or wget), tar, python3. Network access needed.
+#                               [--download-dir DIR] [--offline]
+# Requires: curl (or wget), tar, python3, and cmake + ninja (downloaded as
+# wheels when missing). --offline never downloads: every file listed by
+# `tools/manifest.py <arch> runtime` and `... build` must already be in the
+# download directory, as in distro package builds.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -22,6 +26,8 @@ MANIFEST="${REPO_ROOT}/tools/runtime-manifest.json"
 OUTDIR="${REPO_ROOT}/build-runtime"
 ARCH="$(uname -m)"
 BUILD_DLIB=1
+OFFLINE=0
+DLDIR=""
 JOBS="$(nproc 2>/dev/null || echo 4)"
 
 while [ $# -gt 0 ]; do
@@ -29,6 +35,8 @@ while [ $# -gt 0 ]; do
         --outdir) OUTDIR="$2"; shift 2 ;;
         --arch) ARCH="$2"; shift 2 ;;
         --no-dlib) BUILD_DLIB=0; shift ;;
+        --download-dir) DLDIR="$2"; shift 2 ;;
+        --offline) OFFLINE=1; shift ;;
         *) echo "unknown option: $1" >&2; exit 2 ;;
     esac
 done
@@ -39,90 +47,57 @@ case "$ARCH" in
 esac
 
 PYTHON_VER="$(python3 -c "import json;print(json.load(open('$MANIFEST'))['python']['version'])")"
-PBS_TAG="$(python3 -c "import json;print(json.load(open('$MANIFEST'))['python']['pbs_tag'])")"
-PY_VARIANT="$(python3 -c "import json;print(json.load(open('$MANIFEST'))['python'].get('variant', 'install_only'))")"
 
 RUNTIME="${OUTDIR}/linux-hello-runtime"
-DLDIR="${OUTDIR}/dl"
+DLDIR="${DLDIR:-${OUTDIR}/dl}"
 mkdir -p "$DLDIR"
 
-fetch() {
-    # fetch <url> <dest>
-    if command -v curl >/dev/null 2>&1; then
-        curl -fL --retry 3 -o "$2" "$1"
-    else
-        wget -O "$2" "$1"
+# get <filename> <url> <sha256>: download unless present, then verify
+get() {
+    if [ ! -f "${DLDIR}/$1" ]; then
+        if [ "$OFFLINE" = 1 ]; then
+            echo "!! $1 is missing from ${DLDIR} (offline)" >&2
+            exit 1
+        fi
+        echo ">> downloading $1"
+        if command -v curl >/dev/null 2>&1; then
+            curl -fL --retry 3 -o "${DLDIR}/$1" "$2"
+        else
+            wget -O "${DLDIR}/$1" "$2"
+        fi
+    fi
+    ACTUAL="$(sha256sum "${DLDIR}/$1" | cut -d' ' -f1)"
+    if [ "$ACTUAL" != "$3" ]; then
+        echo "!! sha256 mismatch for $1" >&2
+        echo "   expected $3" >&2
+        echo "   actual   $ACTUAL" >&2
+        exit 1
     fi
 }
 
 # ---------------------------------------------------------------------------
-# 1. CPython (python-build-standalone, install_only)
+# 1. Downloads: CPython, wheels, dlib sources, build-only wheels
 # ---------------------------------------------------------------------------
-PY_TARBALL="cpython-${PYTHON_VER}+${PBS_TAG}-${ARCH}-unknown-linux-gnu-${PY_VARIANT}.tar.gz"
-PY_URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PBS_TAG}/$(python3 -c "import urllib.parse;print(urllib.parse.quote('${PY_TARBALL}'))")"
-
-if [ ! -f "${DLDIR}/${PY_TARBALL}" ]; then
-    echo ">> downloading CPython ${PYTHON_VER} (${ARCH})"
-    fetch "$PY_URL" "${DLDIR}/${PY_TARBALL}"
-fi
-PY_EXPECTED="$(python3 -c "import json;print(json.load(open('$MANIFEST'))['python']['sha256']['$ARCH'])")"
-PY_ACTUAL="$(sha256sum "${DLDIR}/${PY_TARBALL}" | cut -d' ' -f1)"
-if [ "$PY_ACTUAL" != "$PY_EXPECTED" ]; then
-    echo "!! sha256 mismatch for ${PY_TARBALL}" >&2
-    echo "   expected $PY_EXPECTED" >&2
-    echo "   actual   $PY_ACTUAL" >&2
-    exit 1
-fi
-echo ">> CPython tarball hash verified"
-
-# ---------------------------------------------------------------------------
-# 2. Wheels: download + verify sha256 from the manifest, then install
-# ---------------------------------------------------------------------------
+PY_TARBALL=""
+DLIB_SDIST=""
 WHEELS=()
-for PKG in numpy opencv-python-headless cffi pycparser cryptography fido2 dbus-fast; do
-    read -r FILENAME URL EXPECTED <<EOF
-$(python3 - "$PKG" "$ARCH" "$MANIFEST" <<'PYEOF'
-import json, sys
-m = json.load(open(sys.argv[3]))
-e = m["packages"][sys.argv[1]]
-arch = sys.argv[2]
-if arch not in e:
-    sys.exit(f"no pinned artifact for {sys.argv[1]} on {arch}")
-print(e[arch]["filename"], e[arch]["url"], e[arch]["sha256"])
-PYEOF
-)
-EOF
-    if [ ! -f "${DLDIR}/${FILENAME}" ]; then
-        echo ">> downloading $FILENAME"
-        fetch "$URL" "${DLDIR}/${FILENAME}"
-    fi
-    ACTUAL="$(sha256sum "${DLDIR}/${FILENAME}" | cut -d' ' -f1)"
-    if [ "$ACTUAL" != "$EXPECTED" ]; then
-        echo "!! sha256 mismatch for $FILENAME" >&2
-        echo "   expected $EXPECTED" >&2
-        echo "   actual   $ACTUAL" >&2
-        exit 1
-    fi
-    WHEELS+=("${DLDIR}/${FILENAME}")
-done
-echo ">> all wheel hashes verified"
-
-# dlib sdist
-DLIB_SDIST="$(python3 -c "import json;print(json.load(open('$MANIFEST'))['packages']['dlib']['sdist']['filename'])")"
-DLIB_URL="$(python3 -c "import json;print(json.load(open('$MANIFEST'))['packages']['dlib']['sdist']['url'])")"
-DLIB_HASH="$(python3 -c "import json;print(json.load(open('$MANIFEST'))['packages']['dlib']['sdist']['sha256'])")"
-if [ ! -f "${DLDIR}/${DLIB_SDIST}" ]; then
-    echo ">> downloading $DLIB_SDIST"
-    fetch "$DLIB_URL" "${DLDIR}/${DLIB_SDIST}"
-fi
-ACTUAL="$(sha256sum "${DLDIR}/${DLIB_SDIST}" | cut -d' ' -f1)"
-if [ "$ACTUAL" != "$DLIB_HASH" ]; then
-    echo "!! sha256 mismatch for $DLIB_SDIST" >&2
-    exit 1
-fi
+BUILD_WHEELS=()
+while read -r FILENAME URL EXPECTED; do
+    get "$FILENAME" "$URL" "$EXPECTED"
+    case "$FILENAME" in
+        cpython-*) PY_TARBALL="$FILENAME" ;;
+        dlib-*.tar.gz) DLIB_SDIST="$FILENAME" ;;
+        *) WHEELS+=("${DLDIR}/${FILENAME}") ;;
+    esac
+done < <(python3 "${REPO_ROOT}/tools/manifest.py" "$ARCH" runtime)
+while read -r FILENAME URL EXPECTED; do
+    get "$FILENAME" "$URL" "$EXPECTED"
+    BUILD_WHEELS+=("${DLDIR}/${FILENAME}")
+done < <(python3 "${REPO_ROOT}/tools/manifest.py" "$ARCH" build)
+echo ">> all hashes verified"
 
 # ---------------------------------------------------------------------------
-# 3. Assemble the runtime tree
+# 2. Assemble the runtime tree
 # ---------------------------------------------------------------------------
 echo ">> extracting CPython into ${RUNTIME}"
 rm -rf "$RUNTIME"
@@ -142,34 +117,50 @@ SITE="${RUNTIME}/python/lib/python${PYTHON_VER%.*}/site-packages"
 echo ">> preparing build venv (dlib build only)"
 "${PYBIN}" -m venv "${OUTDIR}/buildvenv"
 VPIP="${OUTDIR}/buildvenv/bin/pip"
-"${VPIP}" install --quiet --upgrade pip setuptools wheel
-"${VPIP}" install --quiet --no-deps "${WHEELS[@]}"
+"${VPIP}" install --quiet --no-index --no-deps "${BUILD_WHEELS[@]}" "${WHEELS[@]}"
 
 if [ "$BUILD_DLIB" = 1 ]; then
     echo ">> building dlib from source (this can take a while)"
-    # cmake/ninja as wheels so no system cmake is required
-    "${VPIP}" install --quiet cmake ninja
-    export PATH="${OUTDIR}/buildvenv/bin:${PATH}"
+    if ! command -v cmake >/dev/null 2>&1 || ! command -v ninja >/dev/null 2>&1; then
+        if [ "$OFFLINE" = 1 ]; then
+            echo "!! cmake and ninja are needed to build dlib" >&2
+            exit 1
+        fi
+        # As wheels, so no system cmake is required
+        "${VPIP}" install --quiet cmake ninja
+        export PATH="${OUTDIR}/buildvenv/bin:${PATH}"
+    fi
     cmake --version >/dev/null || { echo "!! cmake not available" >&2; exit 1; }
     # No CUDA, no GUI layer: the face core is used headless inside PAM.
     export DLIB_USE_CUDA=0
     export DLIB_NO_GUI_SUPPORT=1
-    "${VPIP}" wheel --no-deps --no-binary dlib --no-build-isolation \
+    # Nothing from the build machine's libraries: a distro update bumping
+    # one of them (libjxl, libjpeg, BLAS ...) must not break face unlock.
+    # Frames come from OpenCV, so dlib never reads image files; the JPEG and
+    # PNG code its Python module links to comes from dlib's own copies.
+    for OPTION in GIF_SUPPORT WEBP_SUPPORT JXL_SUPPORT LINK_WITH_SQLITE3 \
+            USE_BLAS USE_LAPACK USE_MKL_FFT; do
+        export "DLIB_${OPTION}=OFF"
+    done
+    # dlib skips its search for a library already marked as not found
+    printf 'set(JPEG_FOUND 0)\nset(PNG_FOUND 0)\n' > "${OUTDIR}/dlib-own-libs.cmake"
+    export CMAKE_TOOLCHAIN_FILE="${OUTDIR}/dlib-own-libs.cmake"
+    "${VPIP}" wheel --no-cache-dir --no-index --no-deps --no-binary dlib --no-build-isolation \
         "${DLDIR}/${DLIB_SDIST}" -w "${OUTDIR}/dlib-wheel"
 fi
 DLIB_WHEEL="$(ls "${OUTDIR}"/dlib-wheel/dlib-*.whl 2>/dev/null || true)"
 
 echo ">> installing wheels into the runtime"
-"${PYBIN}" -m pip install --quiet --no-deps --target "$SITE" "${WHEELS[@]}"
+"${PYBIN}" -m pip install --quiet --no-index --no-deps --target "$SITE" "${WHEELS[@]}"
 if [ "$BUILD_DLIB" = 1 ] && [ -n "$DLIB_WHEEL" ]; then
-    "${RUNTIME}/python/bin/pip" install --quiet --no-deps --target "$SITE" "$DLIB_WHEEL"
+    "${RUNTIME}/python/bin/pip" install --quiet --no-index --no-deps --target "$SITE" "$DLIB_WHEEL"
 fi
 # The runtime ships without pip: it is fully managed by this script.
 rm -rf "${RUNTIME}/python/bin/pip" "${RUNTIME}/python/bin/pip3" \
        "${RUNTIME}/python/lib/python${PYTHON_VER%.*}/ensurepip"
 
 # ---------------------------------------------------------------------------
-# 4. Strip dead weight
+# 3. Strip dead weight
 # ---------------------------------------------------------------------------
 if [ "${NO_STRIP:-0}" != "1" ]; then
     echo ">> stripping binaries (site-packages only)"
