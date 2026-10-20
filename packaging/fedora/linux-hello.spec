@@ -136,7 +136,7 @@ fi
 %{_unitdir}/linux-hello-daemon.service
 %{_unitdir}/linux-hello-webauthn.service
 %{_udevrulesdir}/70-linux-hello-webauthn.rules
-%{_datadir}/applications/linux-hello.desktop
+%{_datadir}/applications/kcm_linuxhello.desktop
 %{_datadir}/bash-completion/completions/linux-hello-cli
 %{_datadir}/dbus-1/interfaces/io.github.LinuxHello1.xml
 %{_datadir}/dbus-1/system-services/io.github.LinuxHello1.service

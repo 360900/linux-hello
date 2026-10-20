@@ -21,8 +21,8 @@ find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS Config CoreAddons I18n KC
 
 add_definitions(-DTRANSLATION_DOMAIN=\"kcm_linuxhello\")
 
-# The app menu entry below replaces the generated hidden one
-kcmutils_add_qml_kcm(kcm_linuxhello DISABLE_DESKTOP_FILE_GENERATION SOURCES
+# Also generates the hidden kcm_linuxhello.desktop, like every KDE settings page
+kcmutils_add_qml_kcm(kcm_linuxhello SOURCES
     facemodule.cpp
     lockscreen.cpp
     replies.cpp
@@ -37,8 +37,6 @@ target_link_libraries(kcm_linuxhello PRIVATE
     KF6::I18n
     KF6::KCMUtilsQuick
 )
-
-install(FILES linux-hello.desktop DESTINATION ${KDE_INSTALL_APPDIR})
 
 # Fallbacks; icon themes can provide their own "linux-hello"
 install(FILES icons/linux-hello.svg DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps)
