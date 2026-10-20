@@ -50,6 +50,7 @@ class Manager:
 		return {
 			"GetStatus": ("", "a{sv}", self.get_status),
 			"Verify": ("s", "ud", self.verify),
+			"VerifyNow": ("s", "ud", self.verify_now),
 			"Enroll": ("ss", "uu", self.enroll),
 			"Cancel": ("", "", self.cancel),
 			"ListModels": ("s", "a(uxs)", self.list_models),
@@ -107,7 +108,7 @@ class Manager:
 		}]
 
 	# -- verification ----------------------------------------------------------
-	async def verify(self, caller, user):
+	async def verify(self, caller, user, pausable=True):
 		# Root (the PAM module in sudo, polkit, the login screen) or the user
 		# for themselves (the PAM module in the lock screen greeter)
 		if caller.uid != 0 and not self.access.is_self(caller, user):
@@ -122,7 +123,7 @@ class Manager:
 
 		# Callers other than root verifying themselves are the lock screen,
 		# which keeps retrying while nobody is in front of the camera
-		lock_screen = caller.uid != 0
+		lock_screen = pausable and caller.uid != 0
 		if lock_screen and self._streak(user) >= PAUSE_AFTER:
 			resumed, cancelled = await self._wait_for_activity(caller, user)
 			if not resumed:
@@ -155,6 +156,11 @@ class Manager:
 		certainty = stats.as_dict()["best_certainty"]
 		log.info("uid %d: verified %s: %s, best certainty %s", caller.uid, user, VerificationResult(result).name, certainty)
 		return [int(result), -1.0 if certainty is None else float(certainty)]
+
+	async def verify_now(self, caller, user):
+		# Started by the user (a test in the settings page, a passkey prompt):
+		# never waits for input activity and does not count as a failed unlock
+		return await self.verify(caller, user, pausable=False)
 
 	def _streak(self, user):
 		count, last = self.failures.get(user, (0, 0.0))

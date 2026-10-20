@@ -289,7 +289,7 @@ void FaceModule::verify()
     }
     m_scanning = true;
     Q_EMIT scanningChanged();
-    call(QStringLiteral("Verify"), {user()}, INTERACTIVE, [this](const QDBusMessage &reply) {
+    call(QStringLiteral("VerifyNow"), {user()}, INTERACTIVE, [this](const QDBusMessage &reply) {
         finishScan();
         Q_EMIT verifyFinished(reply.arguments().value(0).toInt(), reply.arguments().value(1).toDouble());
     }, [this](const QDBusError &error) {

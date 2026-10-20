@@ -1,7 +1,8 @@
 # Internal face verification API
 # Based on PR #1125 by qilsklo (https://github.com/boltgolt/howdy/pull/1125)
-# Asks the Linux Hello service (io.github.LinuxHello1) to verify a face,
-# the same way the PAM module does, so callers get identical behaviour.
+# Asks the Linux Hello service (io.github.LinuxHello1) to verify a face
+# with VerifyNow: the same scan the PAM module gets, but a passkey prompt is
+# started by the user, so the lock screen's pause never applies.
 
 import asyncio
 import enum
@@ -92,7 +93,7 @@ class FaceVerifier:
 				destination=self.BUS_NAME,
 				path=self.OBJECT_PATH,
 				interface=self.INTERFACE,
-				member="Verify",
+				member="VerifyNow",
 				signature="s",
 				body=[user],
 			)), timeout)

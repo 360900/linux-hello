@@ -27,6 +27,15 @@
       <arg name="certainty" type="d" direction="out"/>
     </method>
 
+    <!-- Verify for a scan the user started (a test, a passkey prompt): it
+         never waits out the lock screen's pause and does not count toward it.
+         Same access rule as Verify. -->
+    <method name="VerifyNow">
+      <arg name="user" type="s" direction="in"/>
+      <arg name="result" type="u" direction="out"/>
+      <arg name="certainty" type="d" direction="out"/>
+    </method>
+
     <!-- Own face: polkit io.github.linuxhello.enroll-self. Other users:
          io.github.linuxhello.manage-users. An empty label picks one.
          Progress arrives as EnrollProgress, sent to the caller only. -->

@@ -424,6 +424,27 @@ def test_lock_screen_pauses_after_failed_scans(env, monkeypatch):
 	assert manager.failures == {}
 
 
+def test_verify_now_neither_waits_nor_counts(env, monkeypatch):
+	import models as model_store
+	from daemon import presence
+	from verification import VerificationResult as R
+
+	model_store.add(ME, "a", [[0.1]], 1)
+	manager, engine = make_scripted(env, [R.TIMEOUT_REACHED] * 7)
+	monkeypatch.setattr(presence, "wait_for_activity", lambda cancel, timeout: pytest.fail("paused a test"))
+
+	# Failed tests leave the lock screen's streak alone
+	for _ in range(3):
+		assert run(manager.verify_now(caller(MY_UID), ME))[0] == R.TIMEOUT_REACHED
+	assert manager.failures == {}
+
+	# And a test still scans while the lock screen is paused
+	for _ in range(3):
+		run(manager.verify(caller(MY_UID), ME))
+	assert run(manager.verify_now(caller(MY_UID), ME))[0] == R.TIMEOUT_REACHED
+	assert len(engine.verify_calls) == 7
+
+
 def test_root_callers_never_pause(env, monkeypatch):
 	import models as model_store
 	from daemon import presence
