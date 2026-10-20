@@ -76,6 +76,11 @@ Remove a source install with `sudo tools/uninstall.sh`.
 - **Keyboard remappers** (keyd, kanata, Steam Input): the Enter for sudo and
   admin prompts is not seen, so those fall back to your password.
 
+## Security
+
+See [SECURITY.md](SECURITY.md) for what Linux Hello protects against and how
+to report a vulnerability.
+
 ## Credits
 
 Remake of [Howdy](https://github.com/boltgolt/howdy) by boltgolt, MIT licensed;
