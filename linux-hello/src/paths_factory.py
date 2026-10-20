@@ -8,6 +8,10 @@ models = [
 ]
 
 
+def version() -> str:
+    return getattr(paths, "version", "unknown")
+
+
 def dlib_data_dir_path() -> str:
     return str(paths.dlib_data_dir)
 

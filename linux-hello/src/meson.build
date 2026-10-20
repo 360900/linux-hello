@@ -1,7 +1,3 @@
-if meson.is_subproject()
-project('linux-hello', 'cpp', license: 'GPL-3.0', version: 'beta', meson_version: '>= 0.64.0')
-endif
-
 
 datadir = get_option('prefix') / get_option('datadir') / 'linux-hello'
 py_conf = configuration_data(paths_dict)

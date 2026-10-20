@@ -24,7 +24,6 @@ import time
 
 from i18n import _
 
-VERSION = "0.1"
 
 RESULTS = {
 	0: _("Success"),
@@ -441,7 +440,8 @@ def main():
 		args.user = invoking_user()
 
 	if args.command == "version":
-		print("Linux Hello " + VERSION)
+		import paths_factory
+		print("Linux Hello " + paths_factory.version())
 		return 0
 	if args.command in LOCAL_COMMANDS:
 		return run_local(args)

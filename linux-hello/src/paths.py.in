@@ -1,5 +1,8 @@
 from pathlib import PurePath
 
+# Linux Hello release, from VERSION in the source tree
+version = "@version@"
+
 # Define the absolute path to the config directory
 config_dir = PurePath("@config_dir@")
 

@@ -2,7 +2,8 @@
 # service; it needs no Python or camera libraries.
 
 cmake_minimum_required(VERSION 3.22)
-project(kcm_linuxhello VERSION 0.1 LANGUAGES CXX)
+file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/../VERSION LINUX_HELLO_VERSION LIMIT_COUNT 1)
+project(kcm_linuxhello VERSION ${LINUX_HELLO_VERSION} LANGUAGES CXX)
 
 set(QT_MIN_VERSION 6.7.0)
 set(KF_MIN_VERSION 6.0.0)

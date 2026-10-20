@@ -1,4 +1,4 @@
-project('linux-hello', 'cpp', license: 'GPL-3.0', version: 'beta', meson_version: '>= 0.64.0')
+project('linux-hello', 'cpp', license: 'GPL-3.0', version: files('VERSION'), meson_version: '>= 0.64.0')
 
 dlibdatadir = get_option('dlib_data_dir') != '' ? get_option('dlib_data_dir') : join_paths(get_option('prefix'), get_option('datadir'), 'dlib-data')
 confdir = get_option('config_dir') != '' ? get_option('config_dir') : join_paths(get_option('prefix'), get_option('sysconfdir'), 'linux-hello')
@@ -29,7 +29,8 @@ paths_dict = {
     'state_dir': statedir,
     'vendor_config_path': vendorconfigpath,
     'log_path': logpath,
-    'python_path': pythonpath
+    'python_path': pythonpath,
+    'version': meson.project_version(),
 }
 
 subdir('linux-hello')

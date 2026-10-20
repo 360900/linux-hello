@@ -22,7 +22,6 @@ from verification import VerificationResult
 
 log = logging.getLogger("linux-hello.manager")
 
-VERSION = "0.1"
 ENROLL_SAMPLES = 5
 ENROLL_TIMEOUT = 30.0
 
@@ -98,7 +97,7 @@ class Manager:
 			except model_store.ModelError:
 				has_models = False
 		return [{
-			"version": Variant("s", VERSION),
+			"version": Variant("s", paths_factory.version()),
 			"disabled": Variant("b", config.getboolean("core", "disabled", fallback=False)),
 			"device": Variant("s", config.get("video", "device_path", fallback="none")),
 			"data_files": Variant("b", _dlib_data_present()),
@@ -334,7 +333,7 @@ class Manager:
 			checks.append([check, state, message])
 
 		config = settings.load()
-		add("daemon", "ok", "Linux Hello service {} is running".format(VERSION))
+		add("daemon", "ok", "Linux Hello service {} is running".format(paths_factory.version()))
 
 		if _dlib_data_present():
 			add("data-files", "ok", "Face recognition data is installed")
