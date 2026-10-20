@@ -1,6 +1,6 @@
 # Builds the current master branch with the bundled Python runtime.
 # The pinned downloads below come from tools/runtime-manifest.json; refresh
-# them with tools/update_pkgbuild.py after changing the manifest.
+# them with tools/update_packaging.py after changing the manifest.
 # LINUX_HELLO_GIT overrides the repository, e.g. for local builds:
 #   LINUX_HELLO_GIT="git+file://$HOME/linux-hello#branch=remake" makepkg
 
@@ -39,7 +39,7 @@ options=('!strip' '!debug')
 source=("linux-hello::${LINUX_HELLO_GIT:-git+https://github.com/360900/linux-hello.git}")
 sha256sums=('SKIP')
 
-# BEGIN pinned sources (tools/update_pkgbuild.py)
+# BEGIN pinned sources (tools/update_packaging.py)
 source_x86_64=(
 	'cpython-3.12.14+20260901-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz::https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz'
 	'numpy-2.5.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl::https://files.pythonhosted.org/packages/65/af/aa78d1a88805456e212b65461354cd943197fb9acecc4c90fd12295123a3/numpy-2.5.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl'
