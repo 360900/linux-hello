@@ -32,6 +32,4 @@ paths_dict = {
     'python_path': pythonpath
 }
 
-# The gui subdir sets up the Qt settings app; the core uses shared paths from paths_dict
-subdir('gui')
 subdir('linux-hello')
