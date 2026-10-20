@@ -26,6 +26,7 @@ from dbus_fast.aio import MessageBus
 from daemon.access import Access
 from daemon.dispatch import Dispatcher
 from daemon.manager import Manager
+from integration.pam import PamError
 
 BUS_NAME = "io.github.LinuxHello1"
 OBJECT_PATH = "/io/github/LinuxHello1"
@@ -50,6 +51,11 @@ async def serve(bus_type=BusType.SYSTEM, idle_timeout=600, bus_address=None, sto
 	dispatcher = Dispatcher(bus, OBJECT_PATH, INTERFACE, {}, _introspection(), access.resolve)
 	manager = manager_factory(access, dispatcher.emit)
 	dispatcher.methods = manager.methods()
+	try:
+		# PAM blocks written by an older version, after an upgrade
+		manager.pam.refresh()
+	except (PamError, OSError) as error:
+		log.error("Could not update the PAM blocks: %s", error)
 
 	loop = asyncio.get_running_loop()
 	last_activity = [loop.time()]

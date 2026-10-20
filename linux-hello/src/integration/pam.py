@@ -54,6 +54,22 @@ KSCREENLOCKER_GREETERS = (
 	"usr/lib64/libexec/kscreenlocker_greet",
 )
 
+# Checks of a service's auth stack that a face match must not skip: with
+# success=done ours ends the stack, so they are copied into our block in
+# front of it. Value: an argument the line needs (faillock only checks with
+# preauth). Running a check twice gives the same answer.
+GATES = {
+	"pam_faillock.so": "preauth",
+	"pam_nologin.so": None,
+	"pam_access.so": None,
+	"pam_shells.so": None,
+	"pam_securetty.so": None,
+	"pam_listfile.so": None,
+	"pam_time.so": None,
+}
+# Deep enough for any real stack, and stops include loops
+MAX_INCLUDE_DEPTH = 8
+
 # Modules that must not end up in a non-interactive face stack copied from
 # kde-fingerprint: the fingerprint module itself and the unconditional permit
 OWN_STACK_DROP = ("pam_fprintd.so", "pam_permit.so")
@@ -121,14 +137,28 @@ def has_block(text):
 	return BEGIN in text
 
 
-def insert_block(text):
-	"""Insert our block before the first auth line of a service file"""
+def gate_line(line):
+	"""Our copy of a check line, or None when the line is not one"""
+	parts = line.split()
+	if len(parts) < 3 or parts[0].lstrip("-") != "auth" or parts[1] not in ("required", "requisite"):
+		return None
+	module = parts[2]
+	name = os.path.basename(module)
+	if name not in GATES or (GATES[name] and GATES[name] not in parts[3:]):
+		return None
+	# "-": a module removed from the system later is skipped, it must not
+	# fail the stack and with it the password
+	return "-auth\t{}\t{}".format(parts[1], " ".join(parts[2:]))
+
+
+def insert_block(text, gates=()):
+	"""Insert our block, behind copies of the gates, before the first auth line"""
 	if has_block(text):
 		return text
 	lines = text.splitlines(keepends=True)
 	if lines and not lines[-1].endswith("\n"):
 		lines[-1] += "\n"
-	block = [BEGIN + "\n", INSERT_LINE + "\n", END + "\n"]
+	block = [BEGIN + "\n"] + [gate + "\n" for gate in gates] + [INSERT_LINE + "\n", END + "\n"]
 
 	for index, line in enumerate(lines):
 		if _is_auth_line(line):
@@ -328,6 +358,40 @@ class PamIntegration:
 			return []
 		raise PamError("unknown target {}".format(target))
 
+	def _auth_lines(self, text, depth=0, seen=None):
+		"""The auth lines of a service file, includes followed"""
+		seen = set() if seen is None else seen
+		for line in text.splitlines():
+			parts = line.split()
+			if not parts or parts[0].startswith("#"):
+				continue
+			included = None
+			if parts[0] == "@include" and len(parts) > 1:
+				included = parts[1]
+			elif len(parts) >= 3 and parts[0].lstrip("-") == "auth" and parts[1] in ("include", "substack"):
+				included = parts[2]
+			if included is None:
+				if parts[0].lstrip("-") == "auth":
+					yield line
+				continue
+			path = self._find(included)
+			if path is None or path in seen or depth >= MAX_INCLUDE_DEPTH:
+				continue
+			seen.add(path)
+			try:
+				yield from self._auth_lines(self._read(path), depth + 1, seen)
+			except (OSError, UnicodeDecodeError):
+				continue
+
+	def _gates(self, text):
+		"""Copies of the checks in a service's whole auth stack, see GATES"""
+		gates = []
+		for line in self._auth_lines(remove_block(text)):
+			gate = gate_line(line)
+			if gate is not None and gate not in gates:
+				gates.append(gate)
+		return gates
+
 	def _includes(self, service, other):
 		"""True when a service pulls in another one's auth stack"""
 		try:
@@ -461,15 +525,25 @@ class PamIntegration:
 				raise PamError("PAM service {} not found".format(service))
 			text = self._read(vendor)
 			action = "copied"
-		if has_block(text):
+		new_text = insert_block(remove_block(text), self._gates(text))
+		if new_text == text:
 			return
-		new_text = insert_block(text)
+		if has_block(text):
+			# A block from an older version: bring it up to date, keeping
+			# how the file came to be
+			action = state["files"].get(path, {}).get("action", action)
 		self._write(path, new_text)
 		state["files"][path] = {
 			"action": action,
 			"target": target,
 			"sha256": _sha256(new_text),
 		}
+
+	def refresh(self):
+		"""Bring the blocks of enabled targets up to date, after an upgrade"""
+		for target in self.targets():
+			if target["enabled"]:
+				self.enable(target["id"])
 
 	def _enable_own(self, service, target, state):
 		path = self._etc(service)
@@ -480,7 +554,8 @@ class PamIntegration:
 		if source is None:
 			source = self._find("kde")
 		text = build_own_stack(self._read(source), from_fingerprint)
-		self._write(path, text)
+		if not (os.path.isfile(path) and self._read(path) == text):
+			self._write(path, text)
 		state["files"][path] = {
 			"action": "created",
 			"target": target,

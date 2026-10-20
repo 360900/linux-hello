@@ -127,9 +127,11 @@ def test_block_goes_before_first_auth_line(tmp_path):
 	PamIntegration(root).enable("sudo")
 	lines = read(root, "etc/pam.d/sudo").splitlines()
 	assert lines[0] == "#%PAM-1.0"
-	assert lines[1:4] == [pam.BEGIN, pam.INSERT_LINE, pam.END]
+	# system-auth's lockout check comes along, so a locked account cannot
+	# get in by face
+	assert lines[1:5] == [pam.BEGIN, "-auth\trequired\tpam_faillock.so preauth", pam.INSERT_LINE, pam.END]
 	# Ahead of fprintd, so a face match wins over waiting for a finger
-	assert "pam_fprintd.so" in lines[4]
+	assert "pam_fprintd.so" in lines[5]
 
 
 def test_block_goes_before_debian_include(tmp_path):
@@ -155,6 +157,55 @@ def test_insert_line_falls_through_on_failure():
 	# returns PAM_IGNORE or is missing entirely
 	assert "default=ignore" in pam.INSERT_LINE
 	assert "success=done" in pam.INSERT_LINE
+
+
+# -- checks a face match must not skip ---------------------------------------
+def test_which_lines_are_gates():
+	assert pam.gate_line("auth required pam_faillock.so preauth silent") == "-auth\trequired\tpam_faillock.so preauth silent"
+	assert pam.gate_line("-auth requisite pam_nologin.so") == "-auth\trequisite\tpam_nologin.so"
+	# Recording a failure is not a check, and jumps would break our block
+	assert pam.gate_line("auth [default=die] pam_faillock.so authfail") is None
+	assert pam.gate_line("auth [success=1 default=ignore] pam_access.so") is None
+	assert pam.gate_line("auth required pam_unix.so") is None
+	assert pam.gate_line("account required pam_nologin.so") is None
+
+
+def write(root, relative, text):
+	path = os.path.join(root, relative)
+	os.makedirs(os.path.dirname(path), exist_ok=True)
+	with open(path, "w") as file:
+		file.write(text)
+
+
+def test_gates_are_found_through_includes(tmp_path):
+	root = str(tmp_path)
+	write(root, "etc/pam.d/sudo", "#%PAM-1.0\n@include common-auth\n")
+	write(root, "etc/pam.d/common-auth", "auth requisite pam_nologin.so\nauth substack deeper\n"
+		"auth [success=1 default=ignore] pam_unix.so\n")
+	write(root, "usr/lib/pam.d/deeper", "auth required pam_faillock.so preauth\nauth include common-auth\n")
+	PamIntegration(root).enable("sudo")
+	lines = read(root, "etc/pam.d/sudo").splitlines()
+	assert lines[1:6] == [pam.BEGIN, "-auth\trequisite\tpam_nologin.so",
+		"-auth\trequired\tpam_faillock.so preauth", pam.INSERT_LINE, pam.END]
+
+
+def test_old_blocks_are_brought_up_to_date(tmp_path):
+	root = tree("arch", tmp_path)
+	before = snapshot(root)
+	integration = PamIntegration(root)
+	integration.enable("sudo")
+	# As an older version wrote it: no checks in the block
+	path = os.path.join(root, "etc/pam.d/sudo")
+	old = read(root, "etc/pam.d/sudo").replace("-auth\trequired\tpam_faillock.so preauth\n", "")
+	with open(path, "w") as file:
+		file.write(old)
+	integration.refresh()
+	assert "pam_faillock.so preauth" in read(root, "etc/pam.d/sudo")
+	integration.refresh()
+	assert read(root, "etc/pam.d/sudo").count("pam_faillock.so") == 1
+	# Still reverts to the original byte for byte
+	integration.reset()
+	assert snapshot(root) == before
 
 
 # -- vendor copies ----------------------------------------------------------

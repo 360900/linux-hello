@@ -222,3 +222,15 @@ def test_pause_is_announced(service, harness, tmp_path):  # noqa: F811
 	cli.managers[0].confirm_paused[ME] = time.monotonic() + 4 * 60 + 10
 	result, _seconds = authenticate(harness, str(tmp_path), "sudo", cli.private_bus)
 	assert "Face is paused for 5 minutes for security" in result.stdout
+
+
+@pytest.mark.as_root
+def test_checks_in_front_still_apply(service, harness, tmp_path):  # noqa: F811
+	# A copied lockout check that fails (here pam_deny) wins over a face match
+	cli = confirming(service, "enter")
+	module = os.path.realpath(MODULE)
+	with open(os.path.join(str(tmp_path), "gated"), "w") as file:
+		file.write("-auth required pam_deny.so\nauth [success=done default=ignore] {}\nauth required pam_permit.so\n".format(module))
+	result, _seconds = authenticate(harness, str(tmp_path), "gated", cli.private_bus)
+	assert HINT in result.stdout
+	assert "result: Authentication failure" in result.stdout
