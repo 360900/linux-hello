@@ -113,7 +113,7 @@ KCM.SimpleKCM {
     Kirigami.FormLayout {
         enabled: kcm.serviceAvailable
 
-        Kirigami.Separator {
+        Item {
             Kirigami.FormData.isSection: true
             Kirigami.FormData.label: i18nc("@title:group", "Your Face")
         }
@@ -185,7 +185,7 @@ KCM.SimpleKCM {
             }
         }
 
-        Kirigami.Separator {
+        Item {
             Kirigami.FormData.isSection: true
             Kirigami.FormData.label: i18nc("@title:group", "Use Face Unlock For")
         }
@@ -229,7 +229,7 @@ KCM.SimpleKCM {
             }
         }
 
-        Kirigami.Separator {
+        Item {
             Kirigami.FormData.isSection: true
             Kirigami.FormData.label: i18nc("@title:group", "Recognition")
         }

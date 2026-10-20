@@ -55,7 +55,7 @@ KCM.SimpleKCM {
             text: i18nc("@option:check", "Turned on")
         }
 
-        Kirigami.Separator {
+        Item {
             Kirigami.FormData.isSection: true
             Kirigami.FormData.label: i18nc("@title:group", "Camera")
         }
@@ -110,7 +110,7 @@ KCM.SimpleKCM {
             }
         }
 
-        Kirigami.Separator {
+        Item {
             Kirigami.FormData.isSection: true
             Kirigami.FormData.label: i18nc("@title:group", "Behavior")
         }
