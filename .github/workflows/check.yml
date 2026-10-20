@@ -3,26 +3,103 @@ on: [push, pull_request]
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - name: Install required libraries
-        run: >
-          sudo apt-get update && sudo apt-get install -y 
-          python3 python3-pip python3-setuptools python3-wheel
-          cmake make build-essential clang-tidy
-          libpam0g-dev libinih-dev libevdev-dev 
-          python3-dev libopencv-dev
-        
-      - name: Install meson
-        run: sudo python3 -m pip install meson ninja
+      - uses: actions/checkout@v4
 
-      - uses: actions/checkout@v2
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build libpam0g-dev libinih-dev \
+            libevdev-dev libsystemd-dev dbus qt6-declarative-dev-tools
+          python3 -m venv venv
+          venv/bin/pip install pytest numpy opencv-python-headless dbus-fast
 
       - name: Build
         run: |
           meson setup build
           ninja -C build
 
-      - name: Check source code
+      - name: Tests
+        working-directory: linux-hello
+        run: ../venv/bin/python -m pytest -q
+
+      - name: Packaging sources match the manifest
+        run: python3 tools/update_packaging.py --check
+
+      - name: QML
+        run: /usr/lib/qt6/bin/qmllint kcm/ui/*.qml
+
+  # Build each package, install it and check the bundled runtime loads
+  arch:
+    runs-on: ubuntu-24.04
+    container: archlinux:base-devel
+    steps:
+      - name: Install dependencies
         run: |
-          ninja clang-tidy -C build
+          pacman -Syu --noconfirm --needed git cmake extra-cmake-modules meson ninja python \
+            kcmutils kconfig kcoreaddons ki18n kirigami libevdev libinih libxcrypt-compat \
+            pam polkit qt6-base qt6-declarative
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build and install
+        run: |
+          useradd -m builder
+          sudo -u builder git config --global --add safe.directory '*'
+          cp -r packaging/arch /home/builder/pkg
+          chown -R builder /home/builder/pkg
+          cd /home/builder/pkg
+          sudo -u builder env LINUX_HELLO_GIT="git+file://$GITHUB_WORKSPACE#commit=$GITHUB_SHA" makepkg --noconfirm
+          pacman -U --noconfirm ./*.pkg.tar.zst
+          linux-hello-cli version
+          /usr/lib/linux-hello-runtime/python/bin/python3 -c "import cv2, dlib, dbus_fast, numpy"
+
+  fedora:
+    runs-on: ubuntu-24.04
+    container: fedora:43
+    steps:
+      - name: Install dependencies
+        run: dnf -y install git rpm-build dnf-plugins-core
+
+      - uses: actions/checkout@v4
+
+      - name: Build and install
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          dnf -y builddep packaging/fedora/linux-hello.spec
+          mkdir -p ~/rpmbuild/SOURCES
+          git archive --prefix="linux-hello-$GITHUB_SHA/" -o ~/rpmbuild/SOURCES/linux-hello-$GITHUB_SHA.tar.gz HEAD
+          python3 tools/manifest.py x86_64 | while read -r name url digest; do
+            curl -fsSL --retry 3 -o ~/rpmbuild/SOURCES/"$name" "$url"
+          done
+          rpmbuild -bb --define "commit $GITHUB_SHA" packaging/fedora/linux-hello.spec
+          dnf -y install ~/rpmbuild/RPMS/*/linux-hello-*.rpm
+          linux-hello-cli version
+          /usr/lib64/linux-hello-runtime/python/bin/python3 -c "import cv2, dlib, dbus_fast, numpy"
+
+  debian:
+    runs-on: ubuntu-24.04
+    container: debian:trixie
+    steps:
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git curl ca-certificates python3 \
+            build-essential devscripts equivs
+
+      - uses: actions/checkout@v4
+
+      - name: Build and install
+        run: |
+          mkdir runtime
+          python3 tools/manifest.py x86_64 | while read -r name url digest; do
+            curl -fsSL --retry 3 -o runtime/"$name" "$url"
+          done
+          mk-build-deps -i -r -t "apt-get -y --no-install-recommends" debian/control
+          dpkg-buildpackage -b -uc -us
+          apt-get install -y ../linux-hello_*.deb
+          linux-hello-cli version
+          /usr/lib/x86_64-linux-gnu/linux-hello-runtime/python/bin/python3 -c "import cv2, dlib, dbus_fast, numpy"
