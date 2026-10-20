@@ -147,8 +147,7 @@ Handy follow-ups:
 
 ```sh
 ninja -C build && sudo ninja -C build install   # rebuild after editing
-sudo ninja -C build uninstall                   # remove again
-sudo cmake --build build-kcm --target uninstall
+sudo tools/uninstall.sh                         # undo PAM changes, remove
 ```
 
 After installing, open **System Settings > Security & Privacy > Face Unlock**
