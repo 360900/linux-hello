@@ -91,21 +91,6 @@ pam_module_conf_data = configuration_data(paths_dict)
 pam_module_conf_data.set('config_file_path', config_path)
 pam_module_conf_data.set('vendor_config_path', vendorconfigpath)
 subdir('pam')
-if get_option('install_pam_config')
-    # pamdir is inherited from the pam subproject
-    pam_config = configure_file(
-        input: 'pam-config/linux-hello.in',
-        output: 'pam-config',
-        configuration: {'pamdir': pamdir}
-    )
-    install_data(
-        pam_config,
-        install_dir: get_option('prefix') / get_option('datadir') / 'pam-configs',
-        install_mode: 'rwxr-xr-x',
-        install_tag: 'pam',
-        rename: 'linux-hello',
-    )
-endif
 
 if get_option('install_in_site_packages')
     py.install_sources(
