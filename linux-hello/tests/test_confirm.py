@@ -14,20 +14,53 @@ def event(code, value=1, kind=confirm.EV_KEY):
 	return confirm.EVENT.pack(0, 0, kind, code, value)
 
 
-def keyboard(root, name, enter=True, virtual=False):
-	"""A fake /sys/class/input/<name>, linked into a physical or virtual device tree"""
+def keyboard(root, name, enter=True, virtual=False, udev="E:ID_INPUT=1\nE:ID_INPUT_KEY=1\nE:ID_INPUT_KEYBOARD=1", mode=0o660):
+	"""A fake input device: sysfs entry, udev database record and /dev node"""
+	number = "13:" + name[len("event"):]
 	device = root / "devices" / ("virtual" if virtual else "platform/i8042") / "input" / name
 	(device / "capabilities").mkdir(parents=True)
 	(device / "capabilities" / "key").write_text(("10000000" if enter else "0") + "\n")
 	(root / "class" / name).mkdir(parents=True)
 	(root / "class" / name / "device").symlink_to(device)
+	(root / "class" / name / "dev").write_text(number + "\n")
+	(root / "udev").mkdir(exist_ok=True)
+	(root / "udev" / ("c" + number)).write_text(udev + "\n")
+	(root / "dev").mkdir(exist_ok=True)
+	(root / "dev" / name).write_text("")
+	os.chmod(root / "dev" / name, mode)
+	return str(root / "dev" / name)
+
+
+def found(root):
+	return [os.path.basename(node) for node in confirm.keyboards(str(root / "class"), str(root / "udev"), str(root / "dev"))]
 
 
 def test_only_physical_keyboards_count(tmp_path):
 	keyboard(tmp_path, "event2")
 	keyboard(tmp_path, "event5", virtual=True)
 	keyboard(tmp_path, "event7", enter=False)
-	assert confirm.keyboards(str(tmp_path / "class")) == ["/dev/input/event2"]
+	assert found(tmp_path) == ["event2"]
+
+
+def test_joysticks_and_writable_devices_do_not_count(tmp_path):
+	# Writing an event to a device node makes every reader see it, and
+	# logind lets the user write to game controllers
+	keyboard(tmp_path, "event2")
+	keyboard(tmp_path, "event3", udev="E:ID_INPUT_KEYBOARD=1\nE:ID_INPUT_JOYSTICK=1")
+	keyboard(tmp_path, "event4", udev="E:ID_INPUT_KEY=1")
+	keyboard(tmp_path, "event6", mode=0o662)
+	assert found(tmp_path) == ["event2"]
+
+
+def test_a_user_acl_with_write_does_not_count(tmp_path):
+	node = keyboard(tmp_path, "event2")
+	header = confirm.ACL_HEADER.pack(2)
+	entries = [(0x01, 6, 0xFFFFFFFF), (confirm.ACL_USER, 6, 1000), (0x04, 6, 0xFFFFFFFF), (0x10, 6, 0xFFFFFFFF), (0x20, 0, 0xFFFFFFFF)]
+	try:
+		os.setxattr(node, "system.posix_acl_access", header + b"".join(confirm.ACL_ENTRY.pack(*e) for e in entries))
+	except OSError:
+		pytest.skip("no ACL support here")
+	assert found(tmp_path) == []
 
 
 @pytest.fixture

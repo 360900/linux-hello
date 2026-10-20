@@ -5,8 +5,9 @@
 # start sudo in a pseudo-terminal or replace the polkit agent and answer
 # the prompt itself. So before scanning for admin prompts and sudo, the
 # service waits for Enter on a physical keyboard, which no program without
-# root can produce: uinput keyboards are virtual and X11 fake input never
-# reaches the kernel.
+# root can produce: uinput keyboards are virtual, and devices a user may
+# write to (game controllers get that through logind) are left out, as
+# writing to a device makes every reader see the event.
 #
 # Nothing waits for typed input meanwhile, like any PAM module: the user
 # has a few seconds to press Enter, with at most one other key before it to
@@ -20,10 +21,20 @@
 
 import os
 import select
+import stat
 import struct
 import time
 
 INPUT_CLASS = "/sys/class/input"
+UDEV_DATA = "/run/udev/data"
+DEV_INPUT = "/dev/input"
+
+# POSIX ACL entries in system.posix_acl_access (linux/posix_acl_xattr.h)
+ACL_HEADER = struct.Struct("<I")
+ACL_ENTRY = struct.Struct("<HHI")
+ACL_USER = 0x02
+ACL_GROUP = 0x08
+ACL_WRITE = 0x02
 
 # From linux/input-event-codes.h
 EV_KEY = 0x01
@@ -67,16 +78,53 @@ def is_physical_keyboard(device):
 	return bool(_bitmap(os.path.join(device, "capabilities", "key")) >> KEY_ENTER & 1)
 
 
-def keyboards(input_class=INPUT_CLASS):
-	"""/dev/input/eventN nodes of physical keyboards"""
+def udev_says_keyboard(event, udev_data=UDEV_DATA):
+	"""event: /sys/class/input/eventN. A keyboard to udev, and no joystick."""
+	try:
+		with open(os.path.join(event, "dev")) as file:
+			number = file.read().strip()
+		with open(os.path.join(udev_data, "c" + number)) as file:
+			properties = set(file.read().splitlines())
+	except OSError:
+		return False
+	return "E:ID_INPUT_KEYBOARD=1" in properties and not any(
+		line.startswith("E:ID_INPUT_JOYSTICK=") for line in properties)
+
+
+def users_may_write(node):
+	"""Whether anyone but root and the owner may write to the device node"""
+	try:
+		info = os.stat(node)
+	except OSError:
+		return True
+	if info.st_mode & stat.S_IWOTH:
+		return True
+	try:
+		acl = os.getxattr(node, "system.posix_acl_access")
+	except OSError:
+		# No ACL: only the owner (root) and the group, input by convention,
+		# whose members can read every key anyway
+		return False
+	for offset in range(ACL_HEADER.size, len(acl) - ACL_ENTRY.size + 1, ACL_ENTRY.size):
+		tag, permissions, _id = ACL_ENTRY.unpack_from(acl, offset)
+		if tag in (ACL_USER, ACL_GROUP) and permissions & ACL_WRITE:
+			return True
+	return False
+
+
+def keyboards(input_class=INPUT_CLASS, udev_data=UDEV_DATA, dev_input=DEV_INPUT):
+	"""/dev/input/eventN nodes of physical keyboards nobody but root can write to"""
 	nodes = []
 	try:
 		names = sorted(os.listdir(input_class))
 	except OSError:
 		return nodes
 	for name in names:
-		if name.startswith("event") and is_physical_keyboard(os.path.join(input_class, name, "device")):
-			nodes.append(os.path.join("/dev/input", name))
+		event = os.path.join(input_class, name)
+		node = os.path.join(dev_input, name)
+		if (name.startswith("event") and is_physical_keyboard(os.path.join(event, "device"))
+				and udev_says_keyboard(event, udev_data) and not users_may_write(node)):
+			nodes.append(node)
 	return nodes
 
 
