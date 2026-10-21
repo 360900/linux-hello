@@ -26,6 +26,7 @@ class FaceModule : public KQuickConfigModule
     Q_PROPERTY(QVariantList targets READ targets NOTIFY targetsChanged)
     Q_PROPERTY(QVariantMap settings READ settings NOTIFY settingsChanged)
     Q_PROPERTY(QVariantList checks READ checks NOTIFY checksChanged)
+    Q_PROPERTY(QVariantMap security READ security NOTIFY securityChanged)
     Q_PROPERTY(QVariantList cameras READ cameras NOTIFY camerasChanged)
     Q_PROPERTY(bool findingCameras READ findingCameras NOTIFY camerasChanged)
 
@@ -67,6 +68,7 @@ public:
     QVariantList targets() const;
     QVariantMap settings() const;
     QVariantList checks() const;
+    QVariantMap security() const;
     QVariantList cameras() const;
     bool findingCameras() const;
     bool scanning() const;
@@ -78,6 +80,7 @@ public:
 
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void diagnose();
+    Q_INVOKABLE void checkSecurity();
     Q_INVOKABLE void findCameras();
 
     Q_INVOKABLE void enroll(const QString &label);
@@ -97,6 +100,7 @@ Q_SIGNALS:
     void targetsChanged();
     void settingsChanged();
     void checksChanged();
+    void securityChanged();
     void camerasChanged();
     void scanningChanged();
     void enrollProgress();
@@ -135,6 +139,7 @@ private:
     QVariantList m_targets;
     QVariantMap m_settings;
     QVariantList m_checks;
+    QVariantMap m_security;
     QVariantList m_cameras;
     bool m_findingCameras = false;
 

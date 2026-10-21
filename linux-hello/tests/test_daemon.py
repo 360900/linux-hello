@@ -802,3 +802,19 @@ def test_local_session_rules():
 	both = dict(desk, **{"/s/2": (1000, "", True, True)})
 	assert not run(logind(both, by_pid="/s/2").has_local_session(1000, 4242))
 	assert run(logind(both, by_pid="/s/1").has_local_session(1000, 4242))
+
+
+def test_security_status_for_anyone(env, monkeypatch):
+	import daemon.manager
+	from integration import security
+
+	monkeypatch.setattr(daemon.manager, "_home_encrypted", lambda user: False)
+	monkeypatch.setattr(security, "secure_boot", lambda: "off")
+	monkeypatch.setattr(security, "tpm_version", lambda: 2)
+	monkeypatch.setattr(security, "tpm_unlock", lambda: False)
+	manager, access, _ = make_manager(env)
+	status = run(manager.security_status(caller(MY_UID)))[0]
+	assert {key: value.value for key, value in status.items()} == {
+		"home_encrypted": False, "secure_boot": "off", "tpm": 2, "tpm_unlock": False}
+	# Nothing to authorize: it only reads
+	assert access.asked == []

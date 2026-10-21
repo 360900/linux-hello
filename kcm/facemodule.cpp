@@ -92,6 +92,11 @@ QVariantList FaceModule::checks() const
     return m_checks;
 }
 
+QVariantMap FaceModule::security() const
+{
+    return m_security;
+}
+
 QVariantList FaceModule::cameras() const
 {
     return m_cameras;
@@ -239,6 +244,14 @@ void FaceModule::diagnose()
     call(QStringLiteral("Diagnose"), {}, QUICK, [this](const QDBusMessage &reply) {
         m_checks = Replies::checks(reply.arguments().value(0));
         Q_EMIT checksChanged();
+    }, {});
+}
+
+void FaceModule::checkSecurity()
+{
+    call(QStringLiteral("SecurityStatus"), {}, QUICK, [this](const QDBusMessage &reply) {
+        m_security = Replies::variantMap(reply.arguments().value(0));
+        Q_EMIT securityChanged();
     }, {});
 }
 

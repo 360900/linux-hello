@@ -46,6 +46,7 @@ py_sources = [
     'integration/encryption.py',
     'integration/kscreenlocker.py',
     'integration/pam.py',
+    'integration/security.py',
     'models.py',
     'settings.py',
     'paths_factory.py',

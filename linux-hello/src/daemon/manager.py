@@ -22,7 +22,7 @@ from daemon import secrets
 from daemon.access import ACTION_CONFIGURE, ACTION_ENROLL_SELF, ACTION_MANAGE_USERS, ACTION_PREVIEW
 from daemon.dispatch import Failed
 from engine import Engine
-from integration import encryption
+from integration import encryption, security
 from integration.pam import PamError, PamIntegration
 from verification import VerificationResult
 
@@ -99,6 +99,7 @@ class Manager:
 			"Diagnose": ("", "a(sss)", self.diagnose),
 			"RememberLoginSecret": ("say", "", self.remember_login_secret),
 			"LoginSecret": ("s", "ay", self.login_secret),
+			"SecurityStatus": ("", "a{sv}", self.security_status),
 		}
 
 	# -- helpers -------------------------------------------------------------
@@ -437,6 +438,16 @@ class Manager:
 		log.info("uid %d: %s face unlock for %s", caller.uid, "enabled" if enabled else "disabled", target)
 		self.emit("TargetsChanged", "", [])
 		return []
+
+	# -- security checklist, see integration/security.py ----------------------
+	async def security_status(self, caller):
+		user = self.access.user_name(caller.uid)
+		return [{
+			"home_encrypted": Variant("b", _home_encrypted(user)),
+			"secure_boot": Variant("s", security.secure_boot()),
+			"tpm": Variant("u", security.tpm_version()),
+			"tpm_unlock": Variant("b", security.tpm_unlock()),
+		}]
 
 	# -- KWallet after logging in automatically, see daemon/secrets.py --------
 	def _keeps_login_secret(self, user):

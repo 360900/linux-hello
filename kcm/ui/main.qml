@@ -27,6 +27,11 @@ KCM.SimpleKCM {
 
     actions: [
         Kirigami.Action {
+            text: i18nc("@action:button", "Security")
+            icon.name: "security-high-symbolic"
+            onTriggered: kcm.push("SecurityPage.qml")
+        },
+        Kirigami.Action {
             text: i18nc("@action:button", "Diagnostics")
             icon.name: "checkmark-symbolic"
             onTriggered: kcm.push("DiagnosticsPage.qml")
