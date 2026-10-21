@@ -93,7 +93,7 @@ TARGETS = [
 	{
 		"id": "login",
 		"label": "Login screen",
-		"description": "Log in with your face. KWallet stays locked until you type your password.",
+		"description": "Leave the password empty and press Enter to log in with your face. A typed password works as usual and unlocks KWallet.",
 	},
 ]
 

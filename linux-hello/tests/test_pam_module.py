@@ -55,6 +55,8 @@ def stacks(directory):
 		"face": "auth [success=ok default=die] {} no_password\n".format(module),
 		# A target with the inserted block, followed by a stand-in password check
 		"sudo": "auth [success=done default=ignore] {}\nauth required pam_deny.so\n".format(module),
+		# The login screen, which reads the password before PAM starts
+		"plasmalogin": "auth [success=done default=ignore] {}\nauth required pam_deny.so\n".format(module),
 	}
 	for name, text in stacks.items():
 		with open(os.path.join(directory, name), "w") as file:
@@ -92,6 +94,30 @@ def test_no_model_falls_through_to_the_password(service, harness, tmp_path):  # 
 	assert result.returncode == 1
 	# pam_deny answered, so the module stepped aside instead of failing hard
 	assert "result: Authentication failure" in result.stdout
+
+
+def test_login_screen_uses_a_typed_password(service, harness, tmp_path):  # noqa: F811
+	import models as model_store
+
+	cli, _allowed, _root = service
+	model_store.add(ME, "office", [[0.5, 0.5]], 1)
+	stacks(str(tmp_path))
+
+	result, _seconds = authenticate(harness, str(tmp_path), "plasmalogin", cli.private_bus, answer="typed")
+	# Left to the password check (pam_deny here) without a scan
+	assert "result: Authentication failure" in result.stdout
+	assert "Identified face" not in result.stdout
+
+
+def test_login_screen_scans_when_the_password_is_empty(service, harness, tmp_path):  # noqa: F811
+	import models as model_store
+
+	cli, _allowed, _root = service
+	model_store.add(ME, "office", [[0.5, 0.5]], 1)
+	stacks(str(tmp_path))
+
+	result, _seconds = authenticate(harness, str(tmp_path), "plasmalogin", cli.private_bus, answer="")
+	assert "result: Success" in result.stdout, result.stdout + result.stderr
 
 
 def test_missing_service_fails_fast(harness, tmp_path, private_bus):  # noqa: F811

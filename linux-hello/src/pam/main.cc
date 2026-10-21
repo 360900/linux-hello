@@ -53,6 +53,13 @@ const std::array<const char *, 14> SESSION_SERVICES = {
     "greetd",       "xscreensaver",    "swaylock",     "hyprlock",
     "i3lock",       "sddm-greeter"};
 
+// Login screens that take the password in their own form and start PAM only
+// on submit, answering password prompts with what was typed. A typed
+// password is used as is, so it is checked and unlocks KWallet; an empty
+// form means the user wants their face.
+const std::array<const char *, 2> PASSWORD_FIRST_SERVICES = {"plasmalogin",
+                                                             "sddm"};
+
 // RAII guard to ensure closelog() is called when identify() returns,
 // regardless of which early-return path is taken.
 struct SyslogGuard {
@@ -241,6 +248,19 @@ auto needs_confirmation(pam_handle_t *pamh, const LayeredConfig &config,
     }
   }
   return true;
+}
+
+auto takes_password_first(pam_handle_t *pamh) -> bool {
+  const void *service = nullptr;
+  if (pam_get_item(pamh, PAM_SERVICE, &service) != PAM_SUCCESS ||
+      service == nullptr) {
+    return false;
+  }
+  return std::any_of(PASSWORD_FIRST_SERVICES.begin(),
+                     PASSWORD_FIRST_SERVICES.end(), [&](const char *name) {
+                       return strcmp(name, static_cast<const char *>(service)) ==
+                              0;
+                     });
 }
 
 /**
@@ -485,6 +505,17 @@ auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
   bindtextdomain(GETTEXT_PACKAGE, LOCALEDIR);
   textdomain(GETTEXT_PACKAGE);
 
+  bool password_first = ask_auth_tok && takes_password_first(pamh);
+  if (password_first) {
+    const char *typed = nullptr;
+    if (pam_get_authtok(pamh, PAM_AUTHTOK, &typed, nullptr) != PAM_SUCCESS) {
+      return PAM_IGNORE;
+    }
+    if (typed != nullptr && typed[0] != '\0') {
+      return PAM_IGNORE;
+    }
+  }
+
   if (needs_confirmation(pamh, config, no_password)) {
     // Not as a session module: there is no prompt to confirm with
     if (!ask_auth_tok) {
@@ -539,7 +570,9 @@ auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
     return std::tuple<int, char *>(pam_res, auth_tok_ptr);
   });
 
-  auto ask_pass = ask_auth_tok && !no_password && workaround != Workaround::Off;
+  // The form was already read above and left empty
+  auto ask_pass = ask_auth_tok && !no_password && !password_first &&
+                  workaround != Workaround::Off;
 
   // We ask for the password if the function requires it and if a workaround is
   // set
