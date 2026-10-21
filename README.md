@@ -4,6 +4,7 @@ Face unlock for KDE Plasma, sudo and polkit.
 
 - Unlocks the Plasma lock screen, approves polkit prompts and sudo with your face.
 - Admin prompts and sudo scan only after you press Enter, so other programs can't use your face.
+- Can log you in at boot with KWallet open and lock the screen at once, so you only look at the camera.
 - Prefers the infrared camera and switches its IR light on by itself.
 - Set up in System Settings. No terminal, no config files.
 - Your password always keeps working.
@@ -39,7 +40,7 @@ models stay in `/var/lib/linux-hello` until you delete them.
 ```sh
 linux-hello-cli status        # what is set up
 linux-hello-cli add           # add your face
-linux-hello-cli enable sudo   # lock-screen, admin, sudo, login
+linux-hello-cli enable sudo   # lock-screen, admin, sudo, login, auto-login
 linux-hello-cli doctor        # find problems
 ```
 
@@ -80,6 +81,11 @@ Remove a source install with `sudo tools/uninstall.sh`.
 
 See [SECURITY.md](SECURITY.md) for what Linux Hello protects against and how
 to report a vulnerability.
+
+Full support needs an encrypted disk: logging in automatically keeps your
+password to open KWallet, and without encryption anyone with your computer can
+read it and your files from a USB stick. [Encrypt your disk](docs/disk-encryption.md)
+with LUKS, and add the TPM and Secure Boot to boot without typing anything.
 
 ## Credits
 

@@ -152,9 +152,12 @@ def test_enroll_stores_samples_and_signals_caller_only(env):
 	assert progress and all(s[3] == ":1.42" for s in progress)
 	assert progress[0][2][1]["state"].value == "captured"
 
-	# The picture comes first, so the face box always has one under it
-	assert signals[0][:2] == ("Preview", "say") and signals[0][3] == ":1.42"
-	user, jpeg = signals[0][2]
+	# The picture comes first, so the face box always has one under it.
+	# ModelsChanged may come before either: the camera thread hands both
+	# to the loop, which can resume enroll first.
+	camera = [signal for signal in signals if signal[0] in ("Preview", "EnrollProgress")]
+	assert camera[0][:2] == ("Preview", "say") and camera[0][3] == ":1.42"
+	user, jpeg = camera[0][2]
 	assert user == ME and jpeg[:2] == b"\xff\xd8"
 	assert ("ModelsChanged", "s", [ME]) in signals
 
