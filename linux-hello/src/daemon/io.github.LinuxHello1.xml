@@ -121,6 +121,18 @@
       <arg name="checks" type="a(sss)" direction="out"/>
     </method>
 
+    <!-- Root only. The password typed at a login, kept while auto-login is
+         on for user and the disk is encrypted, so KWallet opens after
+         logging in automatically. LoginSecret is empty without one. -->
+    <method name="RememberLoginSecret">
+      <arg name="user" type="s" direction="in"/>
+      <arg name="secret" type="ay" direction="in"/>
+    </method>
+    <method name="LoginSecret">
+      <arg name="user" type="s" direction="in"/>
+      <arg name="secret" type="ay" direction="out"/>
+    </method>
+
     <!-- state s (searching, no-face, multiple-faces, too-far, too-dark,
          captured), sample u, samples u, face ad [left, top, right, bottom]
          as fractions of the frame, darkness d -->

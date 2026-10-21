@@ -86,7 +86,7 @@ def build_parser():
   rename <id> <label>      rename a face model
   clear                    remove all face models of the user
   targets                  where face unlock can be used
-  enable <target>          use face unlock for lock-screen, admin, sudo or login
+  enable <target>          use face unlock for lock-screen, admin, sudo, login or auto-login
   disable <target>         stop using it there
   set <option> <value>     change a setting
   cameras                  list cameras, best first
@@ -275,7 +275,7 @@ def cmd_targets(client, args):
 
 def cmd_enable(client, args, enabled=True):
 	if not args.arguments:
-		fail(_("Give a target: lock-screen, admin, sudo or login"))
+		fail(_("Give a target: lock-screen, admin, sudo, login or auto-login"))
 	# Hand the lock screen back to the password before the Face option can
 	# go away: kscreenlocker crashes when the choice outlives the option
 	if not enabled and "lock-screen" in args.arguments:

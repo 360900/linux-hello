@@ -1,0 +1,73 @@
+#!/bin/sh
+# Keeps a session that started without a password behind the lock screen.
+#
+# Runs at the start of every Plasma session and does nothing unless
+# plasmalogin logged in automatically (linux-hello-cli enable auto-login).
+# Then it locks the screen at once and turns on LockOnStart, so later boots
+# start locked before anything shows. When the screen is still not locked
+# after GRACE seconds, for example because the lock screen did not start,
+# the session is ended and the login screen comes back.
+
+GRACE=15
+AUTOLOGIN_FILE=/etc/plasmalogin.conf.d/linux-hello.conf
+
+locked() {
+	busctl --user call org.freedesktop.ScreenSaver /ScreenSaver org.freedesktop.ScreenSaver GetActive 2>/dev/null | grep -qx 'b true'
+}
+
+lock() {
+	busctl --user call org.freedesktop.ScreenSaver /ScreenSaver org.freedesktop.ScreenSaver Lock >/dev/null 2>&1
+}
+
+lock_on_start() {
+	kreadconfig6 --file kscreenlockerrc --group Daemon --key "$1" 2>/dev/null
+}
+
+set_lock_on_start() {
+	command -v kwriteconfig6 >/dev/null || return 0
+	if [ "$1" = on ]; then
+		# Left alone when the user turned it on themselves
+		[ "$(lock_on_start LockOnStart)" = true ] && return 0
+		kwriteconfig6 --file kscreenlockerrc --group Daemon --key LockOnStart true
+		kwriteconfig6 --file kscreenlockerrc --group Daemon --key LinuxHelloLockOnStart true
+	elif [ "$(lock_on_start LinuxHelloLockOnStart)" = true ]; then
+		kwriteconfig6 --file kscreenlockerrc --group Daemon --key LockOnStart --delete
+		kwriteconfig6 --file kscreenlockerrc --group Daemon --key LinuxHelloLockOnStart --delete
+	fi
+}
+
+# This user's session that plasmalogin started without a password, if any
+autologin_session() {
+	uid=$(id -u)
+	loginctl list-sessions --no-legend 2>/dev/null | while read -r id session_uid _rest; do
+		[ "$session_uid" = "$uid" ] || continue
+		[ "$(loginctl show-session "$id" -p Service --value 2>/dev/null)" = plasmalogin-autologin ] || continue
+		[ "$(loginctl show-session "$id" -p State --value 2>/dev/null)" = closing ] && continue
+		echo "$id"
+		break
+	done
+}
+
+session=$(autologin_session)
+if [ -z "$session" ]; then
+	# Auto-login was turned off: stop starting locked after a password login
+	[ -e "$AUTOLOGIN_FILE" ] || set_lock_on_start off
+	exit 0
+fi
+
+set_lock_on_start on
+
+steps=0
+while [ "$steps" -lt $((GRACE * 4)) ]; do
+	if locked; then
+		exit 0
+	fi
+	# Once a second, in case the lock screen was not ready to take it
+	[ $((steps % 4)) -eq 0 ] && lock
+	sleep 0.25
+	steps=$((steps + 1))
+done
+
+echo "The screen did not lock after logging in automatically, ending session $session" >&2
+loginctl terminate-session "$session"
+exit 1

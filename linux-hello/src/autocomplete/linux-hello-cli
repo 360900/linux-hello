@@ -12,7 +12,7 @@ _linux_hello_cli() {
 			return 0
 			;;
 		enable|disable)
-			COMPREPLY=( $(compgen -W "lock-screen admin sudo login" -- "${cur}") )
+			COMPREPLY=( $(compgen -W "lock-screen admin sudo login auto-login" -- "${cur}") )
 			return 0
 			;;
 		-U|--user)

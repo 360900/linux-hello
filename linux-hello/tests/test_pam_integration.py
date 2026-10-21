@@ -50,6 +50,7 @@ def test_targets_resolve_per_distro(tmp_path):
 			"admin": ["polkit-1"],
 			"sudo": ["sudo"],
 			"login": ["plasmalogin"],
+			"auto-login": ["plasmalogin-autologin", "plasmalogin"],
 		},
 		"fedora": {
 			"lock-screen": ["kde-face"],
@@ -57,6 +58,7 @@ def test_targets_resolve_per_distro(tmp_path):
 			# sudo-i includes sudo on Fedora
 			"sudo": ["sudo"],
 			"login": ["sddm"],
+			"auto-login": [],
 		},
 		"debian": {
 			# Greeter without kde-face support: patch the interactive stack
@@ -64,6 +66,7 @@ def test_targets_resolve_per_distro(tmp_path):
 			"admin": ["polkit-1"],
 			"sudo": ["sudo", "sudo-i"],
 			"login": ["sddm"],
+			"auto-login": [],
 		},
 	}
 	for distro, targets in expected.items():
@@ -78,7 +81,8 @@ def test_global_stacks_are_never_touched(system):
 	before = snapshot(root)
 	integration = PamIntegration(root)
 	for target in integration.targets():
-		integration.enable(target["id"])
+		if target["available"]:
+			integration.enable(target["id"], user="alice")
 	after = snapshot(root)
 	for name in ("system-auth", "system-login", "system-local-login", "common-auth"):
 		relative = os.path.join("etc/pam.d", name)
@@ -106,7 +110,8 @@ def test_reset_restores_tree(system):
 	before = snapshot(root)
 	integration = PamIntegration(root)
 	for target in integration.targets():
-		integration.enable(target["id"])
+		if target["available"]:
+			integration.enable(target["id"], user="alice")
 	integration.reset()
 	assert snapshot(root) == before
 
@@ -425,3 +430,110 @@ def test_disable_keeps_face_option_while_users_start_with_it(tmp_path):
 	# Once nobody depends on it, a later disable or reset removes it
 	integration.reset()
 	assert not os.path.exists(os.path.join(root, pam.KSCREENLOCKER_CONFIG))
+
+
+# -- auto-login -------------------------------------------------------------
+AUTOLOGIN = "etc/plasmalogin.conf.d/linux-hello.conf"
+
+
+def test_auto_login_only_with_plasma_login_manager(tmp_path):
+	available = lambda distro: {t["id"]: t["available"] for t in PamIntegration(tree(distro, tmp_path)).targets()}["auto-login"]
+	assert available("arch")
+	assert not available("fedora") and not available("debian")
+
+
+def test_auto_login_round_trip(tmp_path):
+	root = tree("arch", tmp_path)
+	before = snapshot(root)
+	integration = PamIntegration(root)
+
+	integration.enable("auto-login", user="alice")
+	text = read(root, AUTOLOGIN)
+	assert "[Autologin]\nUser=alice\nSession=plasma\n" in text
+	# plasmalogin's own file stays as it was
+	assert read(root, "etc/plasmalogin.conf") == "[Autologin]\nSession=plasma\n"
+	assert {t["id"]: t["enabled"] for t in integration.targets()}["auto-login"]
+
+	# The kept password goes to pam_kwallet5, before its auth line
+	autologin = read(root, "etc/pam.d/plasmalogin-autologin")
+	assert autologin.index(pam.WALLET_RELEASE_LINE) < autologin.index("pam_kwallet5.so")
+	# and is taken at a login with the password: held after every auth
+	# line, handed over once the session opens
+	login = read(root, "etc/pam.d/plasmalogin")
+	auth_lines = [line for line in login.splitlines() if line.lstrip("-").startswith("auth")]
+	assert auth_lines[-1] == pam.WALLET_HOLD_LINE
+	assert login.rstrip().endswith(pam.WALLET_REMEMBER_LINE + "\n" + pam.END)
+
+	integration.disable("auto-login")
+	assert snapshot(root) == before
+
+
+def test_auto_login_keeps_its_user_on_refresh(tmp_path):
+	root = tree("arch", tmp_path)
+	integration = PamIntegration(root)
+	integration.enable("auto-login", user="alice")
+	integration.refresh()
+	assert "User=alice" in read(root, AUTOLOGIN)
+
+
+@pytest.mark.parametrize("user", [None, "root", "alice\nUser=bob", "", "a b"])
+def test_auto_login_needs_a_regular_user(tmp_path, user):
+	root = tree("arch", tmp_path)
+	with pytest.raises(PamError):
+		PamIntegration(root).enable("auto-login", user=user)
+	assert not os.path.exists(os.path.join(root, AUTOLOGIN))
+
+
+@pytest.mark.parametrize("line", ["User=bob", "User="])
+def test_auto_login_refused_when_plasma_login_names_a_user(tmp_path, line):
+	# The main file wins over drop-ins, so ours would do nothing
+	root = tree("arch", tmp_path)
+	with open(os.path.join(root, "etc/plasmalogin.conf"), "a") as file:
+		file.write(line + "\n")
+	with pytest.raises(PamError):
+		PamIntegration(root).enable("auto-login", user="alice")
+
+
+def test_edited_auto_login_is_still_removed(tmp_path):
+	# Left behind, it would keep logging in without a password
+	root = tree("arch", tmp_path)
+	integration = PamIntegration(root)
+	integration.enable("auto-login", user="alice")
+	with open(os.path.join(root, AUTOLOGIN), "a") as file:
+		file.write("Relogin=true\n")
+	integration.disable("auto-login")
+	assert not os.path.exists(os.path.join(root, AUTOLOGIN))
+
+
+def test_reset_without_manifest_removes_auto_login(tmp_path):
+	root = tree("arch", tmp_path)
+	integration = PamIntegration(root)
+	integration.enable("auto-login", user="alice")
+	os.unlink(os.path.join(root, pam.STATE_FILE))
+	integration.reset()
+	assert not os.path.exists(os.path.join(root, AUTOLOGIN))
+
+
+@pytest.mark.parametrize("first", ["login", "auto-login"])
+def test_login_and_auto_login_share_the_login_screen_file(tmp_path, first):
+	root = tree("arch", tmp_path)
+	before = snapshot(root)
+	integration = PamIntegration(root)
+	second = "auto-login" if first == "login" else "login"
+
+	integration.enable(first, user="alice")
+	integration.enable(second, user="alice")
+	text = read(root, "etc/pam.d/plasmalogin")
+	assert pam.BEGIN in text and pam.WALLET_BEGIN in text
+
+	# Turning one off leaves the other's block
+	integration.disable(first)
+	text = read(root, "etc/pam.d/plasmalogin")
+	enabled = {t["id"]: t["enabled"] for t in integration.targets()}
+	assert enabled[second] and not enabled[first]
+	assert (pam.BEGIN in text) == (second == "login")
+	assert (pam.WALLET_BEGIN in text) == (second == "auto-login")
+
+	# and the copy goes once both are off
+	integration.disable(second)
+	assert snapshot(root) == before

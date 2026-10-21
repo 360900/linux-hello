@@ -63,8 +63,9 @@ def stacks(directory):
 			file.write(text)
 
 
-def authenticate(harness, confdir, service_name, bus_address, answer=None, tty=None):
+def authenticate(harness, confdir, service_name, bus_address, answer=None, tty=None, **extra):
 	env = dict(os.environ, DBUS_SYSTEM_BUS_ADDRESS=bus_address)
+	env.update({"HARNESS_" + key.upper(): value for key, value in extra.items()})
 	if answer is not None:
 		env["HARNESS_ANSWER"] = answer
 	if tty is not None:
@@ -260,3 +261,83 @@ def test_checks_in_front_still_apply(service, harness, tmp_path):  # noqa: F811
 	result, _seconds = authenticate(harness, str(tmp_path), "gated", cli.private_bus)
 	assert HINT in result.stdout
 	assert "result: Authentication failure" in result.stdout
+
+
+# -- KWallet after logging in automatically ----------------------------------
+def kwallet_stacks(directory):
+	module = os.path.realpath(MODULE)
+	stacks = {
+		# The login screen: the form's password is read, checked (pam_permit
+		# here), held, and handed over once the session opens
+		"plasmalogin": (
+			"auth [success=done default=ignore] {0}\n"
+			"auth required pam_permit.so\n"
+			"-auth optional {0} remember_password\n"
+			"session required pam_permit.so\n"
+			"-session optional {0} remember_password\n").format(module),
+		# plasmalogin-autologin; pam_exec stands in for pam_kwallet5 and
+		# writes down the password it gets
+		"autologin": "auth optional {} kwallet\nauth optional pam_exec.so expose_authtok {}\nauth required pam_permit.so\n".format(
+			module, os.path.join(directory, "kwallet")),
+	}
+	kwallet = os.path.join(directory, "kwallet")
+	with open(kwallet, "w") as file:
+		file.write("#!/bin/sh\ncat > {}\n".format(os.path.join(directory, "kwallet-got")))
+	os.chmod(kwallet, 0o755)
+	for name, text in stacks.items():
+		with open(os.path.join(directory, name), "w") as file:
+			file.write(text)
+
+
+def kwallet_got(directory):
+	"""What the pam_kwallet5 stand-in was given, without the NUL pam_exec adds"""
+	with open(os.path.join(directory, "kwallet-got"), "rb") as file:
+		return file.read().rstrip(b"\0")
+
+
+def auto_login_on(service, monkeypatch):
+	import daemon.manager
+
+	cli, _allowed, _root = service
+	monkeypatch.setattr(daemon.manager, "_home_encrypted", lambda user: True)
+	cli.managers[0].pam.enable("auto-login", user=ME)
+	return cli
+
+
+@pytest.mark.as_root
+def test_password_kept_at_login_and_given_back_when_logging_in_automatically(service, harness, tmp_path, monkeypatch):  # noqa: F811
+	from daemon import secrets
+
+	cli = auto_login_on(service, monkeypatch)
+	kwallet_stacks(str(tmp_path))
+
+	result, _seconds = authenticate(harness, str(tmp_path), "plasmalogin", cli.private_bus, answer="hunter2", session="1")
+	assert "session: Success" in result.stdout, result.stdout + result.stderr
+	assert secrets.load(ME) == b"hunter2"
+
+	result, _seconds = authenticate(harness, str(tmp_path), "autologin", cli.private_bus)
+	assert "result: Success" in result.stdout
+	assert kwallet_got(tmp_path) == b"hunter2"
+
+
+@pytest.mark.as_root
+def test_nothing_kept_without_auto_login(service, harness, tmp_path):  # noqa: F811
+	from daemon import secrets
+
+	cli, _allowed, _root = service
+	kwallet_stacks(str(tmp_path))
+	authenticate(harness, str(tmp_path), "plasmalogin", cli.private_bus, answer="hunter2", session="1")
+	assert secrets.load(ME) is None
+
+
+def test_only_root_gets_the_password(service, harness, tmp_path, monkeypatch):  # noqa: F811
+	from daemon import secrets
+
+	cli = auto_login_on(service, monkeypatch)
+	secrets.store(ME, b"hunter2")
+	kwallet_stacks(str(tmp_path))
+	authenticate(harness, str(tmp_path), "autologin", cli.private_bus)
+	assert kwallet_got(tmp_path) != b"hunter2"
+	# nor hands one over
+	authenticate(harness, str(tmp_path), "plasmalogin", cli.private_bus, answer="other", session="1")
+	assert secrets.load(ME) == b"hunter2"

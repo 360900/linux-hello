@@ -14,6 +14,8 @@ ExecStart=@daemon_path@
 ReadWritePaths=/etc/pam.d
 # kscreenlockerrc, which turns on face unlock on the Plasma lock screen
 ReadWritePaths=-/etc/xdg
+# The drop-in that turns on logging in automatically
+ReadWritePaths=-/etc/plasmalogin.conf.d
 ProtectSystem=strict
 # Read only: disabling face unlock on the lock screen checks which users'
 # lock screens still start with it
@@ -28,6 +30,8 @@ DeviceAllow=char-video4linux rw
 DeviceAllow=char-input r
 # OpenVINO runs on the iGPU
 DeviceAllow=char-drm rw
+# Seals the password kept for KWallet (daemon/secrets.py)
+DeviceAllow=/dev/tpmrm0 rw
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes

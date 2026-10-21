@@ -254,6 +254,65 @@ def test_targets_need_configure(env):
 	assert ("TargetsChanged", "", []) in signals
 
 
+@pytest.fixture
+def encrypted(monkeypatch):
+	import daemon.manager
+	monkeypatch.setattr(daemon.manager, "_home_encrypted", lambda user: True)
+
+
+def test_auto_login_logs_in_who_turned_it_on(env, encrypted):
+	from daemon.dispatch import Failed
+
+	manager, _, _ = make_manager(env, allowed={"io.github.linuxhello.configure"})
+	run(manager.set_target(caller(MY_UID), "auto-login", True))
+	with open(os.path.join(env, "etc/plasmalogin.conf.d/linux-hello.conf")) as file:
+		assert "User={}\n".format(ME) in file.read()
+	# Not root, through sudo
+	run(manager.set_target(caller(MY_UID), "auto-login", False))
+	with pytest.raises(Failed):
+		run(manager.set_target(caller(0), "auto-login", True))
+
+
+def test_auto_login_needs_an_encrypted_disk(env):
+	from daemon.dispatch import Failed
+
+	manager, _, _ = make_manager(env, allowed={"io.github.linuxhello.configure"})
+	with pytest.raises(Failed):
+		run(manager.set_target(caller(MY_UID), "auto-login", True))
+	assert not os.path.exists(os.path.join(env, "etc/plasmalogin.conf.d/linux-hello.conf"))
+
+
+def test_auto_login_on_a_plain_disk_when_allowed(env):
+	manager, _, _ = make_manager(env, allowed={"io.github.linuxhello.configure"})
+	run(manager.set_setting(caller(0), "core", "insecure_auto_login", "true"))
+	run(manager.set_target(caller(MY_UID), "auto-login", True))
+
+
+def test_login_password_kept_only_for_auto_login_and_root(env, encrypted):
+	from daemon import secrets
+	from daemon.dispatch import Failed
+
+	manager, _, _ = make_manager(env, allowed={"io.github.linuxhello.configure"})
+	# Auto-login off: dropped
+	run(manager.remember_login_secret(caller(0), ME, b"hunter2"))
+	assert not secrets.exists(ME)
+	assert run(manager.login_secret(caller(0), ME)) == [b""]
+
+	run(manager.set_target(caller(MY_UID), "auto-login", True))
+	assert run(manager.get_status(caller(MY_UID)))[0]["login_secret_missing"].value
+	with pytest.raises(Failed):
+		run(manager.remember_login_secret(caller(MY_UID), ME, b"hunter2"))
+	run(manager.remember_login_secret(caller(0), ME, b"hunter2"))
+	assert not run(manager.get_status(caller(MY_UID)))[0]["login_secret_missing"].value
+	with pytest.raises(Failed):
+		run(manager.login_secret(caller(MY_UID), ME))
+	assert run(manager.login_secret(caller(0), ME)) == [b"hunter2"]
+
+	# Turning it off forgets it
+	run(manager.set_target(caller(MY_UID), "auto-login", False))
+	assert not secrets.exists(ME)
+
+
 def test_unknown_target_is_an_error(env):
 	from daemon.dispatch import Failed
 
@@ -340,7 +399,7 @@ def test_service_over_dbus(env, private_bus):
 		assert verify.body == [10, -1.0]
 
 		targets = await call("ListTargets")
-		assert {t[0] for t in targets.body[0]} == {"lock-screen", "admin", "sudo", "login"}
+		assert {t[0] for t in targets.body[0]} == {"lock-screen", "admin", "sudo", "login", "auto-login"}
 
 		# No polkit on a private bus: the check fails closed
 		denied = await call("SetTarget", "sb", ["sudo", True])

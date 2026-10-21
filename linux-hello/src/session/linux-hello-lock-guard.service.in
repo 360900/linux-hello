@@ -1,0 +1,13 @@
+[Unit]
+Description=Keep a session started without a password behind the lock screen
+Documentation=man:linux-hello-cli(1)
+After=plasma-kwin_wayland.service
+PartOf=graphical-session.target
+
+[Service]
+Type=exec
+ExecStart=@guard_path@
+Slice=session.slice
+
+[Install]
+WantedBy=plasma-core.target

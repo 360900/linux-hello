@@ -103,10 +103,13 @@ KCM.SimpleKCM {
                 { text: i18nc("@item:inlistbox", "Leave as it is"), value: "off" },
             ]
             readonly property string current: (kcm.settings["video.ir_emitter"] || "auto").toLowerCase() === "off" ? "off" : "auto"
-            currentIndex: indexOfValue(current)
+            // Looked up in the list itself: indexOfValue() answers -1 until
+            // the items exist, and nothing asks it again after
+            readonly property int currentChoice: Math.max(0, model.findIndex(choice => choice.value === current))
+            currentIndex: currentChoice
             onActivated: index => {
                 kcm.setSetting("video", "ir_emitter", model[index].value)
-                currentIndex = Qt.binding(() => indexOfValue(current))
+                currentIndex = Qt.binding(() => currentChoice)
             }
         }
 
@@ -131,6 +134,24 @@ KCM.SimpleKCM {
             font: Kirigami.Theme.smallFont
             color: confirmElevation.checked ? Kirigami.Theme.textColor : Kirigami.Theme.negativeTextColor
             opacity: confirmElevation.checked ? 0.7 : 1
+        }
+
+        SettingCheckBox {
+            id: insecureAutoLogin
+            Kirigami.FormData.label: i18n("Log in automatically:")
+            section: "core"
+            key: "insecure_auto_login"
+            text: i18nc("@option:check", "Also on a disk that is not encrypted")
+        }
+        QQC2.Label {
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 24
+            text: insecureAutoLogin.checked
+                ? i18n("Anyone who has this computer can read your password from a USB stick, along with all your files.")
+                : i18n("Logging in automatically keeps your password to open KWallet, so it needs an encrypted disk.")
+            wrapMode: Text.Wrap
+            font: Kirigami.Theme.smallFont
+            color: insecureAutoLogin.checked ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
+            opacity: insecureAutoLogin.checked ? 1 : 0.7
         }
 
         SettingCheckBox {

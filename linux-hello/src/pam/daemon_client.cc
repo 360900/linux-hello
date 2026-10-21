@@ -171,3 +171,63 @@ auto VerifyRequest::run() -> Status {
   certainty_ = reply.certainty;
   return Status::Answered;
 }
+
+namespace {
+
+// Logging in waits for these, so not long
+const uint64_t SECRET_TIMEOUT_USEC = 10 * 1000 * 1000;
+
+} // namespace
+
+auto remember_login_secret(const std::string &user, const std::string &secret)
+    -> bool {
+  sd_bus *bus = nullptr;
+  if (sd_bus_open_system(&bus) < 0) {
+    return false;
+  }
+  sd_bus_set_method_call_timeout(bus, SECRET_TIMEOUT_USEC);
+  sd_bus_message *message = nullptr;
+  int r = sd_bus_message_new_method_call(bus, &message, BUS_NAME, OBJECT_PATH,
+                                         INTERFACE, "RememberLoginSecret");
+  if (r >= 0) {
+    r = sd_bus_message_append(message, "s", user.c_str());
+  }
+  if (r >= 0) {
+    r = sd_bus_message_append_array(message, 'y', secret.data(),
+                                    secret.size());
+  }
+  if (r >= 0) {
+    sd_bus_error error = SD_BUS_ERROR_NULL;
+    r = sd_bus_call(bus, message, 0, &error, nullptr);
+    sd_bus_error_free(&error);
+  }
+  // The message holds a copy of the password
+  sd_bus_message_unref(message);
+  sd_bus_flush_close_unref(bus);
+  return r >= 0;
+}
+
+auto login_secret(const std::string &user) -> std::string {
+  sd_bus *bus = nullptr;
+  if (sd_bus_open_system(&bus) < 0) {
+    return {};
+  }
+  sd_bus_set_method_call_timeout(bus, SECRET_TIMEOUT_USEC);
+  sd_bus_error error = SD_BUS_ERROR_NULL;
+  sd_bus_message *reply = nullptr;
+  std::string secret;
+  int r = sd_bus_call_method(bus, BUS_NAME, OBJECT_PATH, INTERFACE,
+                             "LoginSecret", &error, &reply, "s", user.c_str());
+  if (r >= 0) {
+    const void *data = nullptr;
+    size_t size = 0;
+    if (sd_bus_message_read_array(reply, 'y', &data, &size) >= 0 &&
+        size > 0) {
+      secret.assign(static_cast<const char *>(data), size);
+    }
+  }
+  sd_bus_error_free(&error);
+  sd_bus_message_unref(reply);
+  sd_bus_flush_close_unref(bus);
+  return secret;
+}

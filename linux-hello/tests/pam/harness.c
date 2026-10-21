@@ -3,7 +3,8 @@
  * Usage: harness <confdir> <service> <user>
  * Prints the PAM result name and every conversation message, answers
  * password prompts with $HARNESS_ANSWER, "wrong-password" by default.
- * $HARNESS_TTY becomes PAM_TTY. */
+ * $HARNESS_TTY becomes PAM_TTY. With $HARNESS_SESSION it also opens a
+ * session. */
 #include <security/pam_appl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,6 +42,9 @@ int main(int argc, char **argv) {
 	}
 	result = pam_authenticate(handle, 0);
 	printf("result: %s\n", pam_strerror(handle, result));
+	if (getenv("HARNESS_SESSION") != NULL) {
+		printf("session: %s\n", pam_strerror(handle, pam_open_session(handle, 0)));
+	}
 	pam_end(handle, result);
 	return result == PAM_SUCCESS ? 0 : 1;
 }

@@ -37,11 +37,13 @@ py_sources = [
     'daemon/io.github.LinuxHello1.xml',
     'daemon/manager.py',
     'daemon/presence.py',
+    'daemon/secrets.py',
     'emitter.py',
     'engine.py',
     'openvino_face.py',
     'i18n.py',
     'integration/__init__.py',
+    'integration/encryption.py',
     'integration/kscreenlocker.py',
     'integration/pam.py',
     'models.py',
@@ -212,6 +214,35 @@ install_data(
     install_dir: systemd_unit_dir,
     install_tag: 'daemon',
 )
+# Locks sessions that plasmalogin started without a password (auto-login).
+# Started with every Plasma session, it exits at once in all others.
+guard_path = get_option('prefix') / get_option('libexecdir') / 'linux-hello-lock-guard'
+install_data(
+    'session/linux-hello-lock-guard',
+    install_mode: 'rwxr-xr-x',
+    install_dir: get_option('libexecdir'),
+    install_tag: 'daemon',
+)
+user_unit_dir = get_option('prefix') / 'lib' / 'systemd' / 'user'
+install_data(
+    configure_file(
+        input: 'session/linux-hello-lock-guard.service.in',
+        output: 'linux-hello-lock-guard.service',
+        configuration: configuration_data({'guard_path': guard_path}),
+    ),
+    install_dir: user_unit_dir,
+    install_tag: 'daemon',
+)
+install_symlink(
+    'linux-hello-lock-guard.service',
+    pointing_to: '../linux-hello-lock-guard.service',
+    install_dir: user_unit_dir / 'plasma-core.target.wants',
+    install_tag: 'daemon',
+)
+# Where the auto-login drop-in goes; the service may only write to
+# directories that exist
+install_emptydir('/etc/plasmalogin.conf.d', install_tag: 'daemon')
+
 install_data(
     'daemon/io.github.LinuxHello1.conf',
     install_dir: get_option('prefix') / get_option('datadir') / 'dbus-1' / 'system.d',

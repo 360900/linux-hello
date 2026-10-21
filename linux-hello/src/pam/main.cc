@@ -710,14 +710,112 @@ auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
 
 // Called by PAM when a user needs to be authenticated, for example by running
 // the sudo command
+auto has_argument(int argc, const char **argv, const char *wanted) -> bool {
+  for (int i = 0; i < argc; i++) {
+    if (strcmp(argv[i], wanted) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+auto user_of(pam_handle_t *pamh) -> std::string {
+  const char *user = nullptr;
+  if (pam_get_user(pamh, &user, nullptr) != PAM_SUCCESS || user == nullptr) {
+    return {};
+  }
+  return user;
+}
+
+/**
+ * "kwallet", in the autologin stack in front of pam_kwallet5: no password
+ * was typed, so hand pam_kwallet5 the one the service kept from the last
+ * login with it, and KWallet opens as usual. Never decides anything.
+ */
+auto give_kwallet_password(pam_handle_t *pamh) -> int {
+  std::string user = user_of(pamh);
+  if (user.empty() || user == "root") {
+    return PAM_IGNORE;
+  }
+  std::string secret = login_secret(user);
+  if (!secret.empty()) {
+    if (pam_set_item(pamh, PAM_AUTHTOK, secret.c_str()) != PAM_SUCCESS) {
+      syslog(LOG_WARNING, "Could not hand the kept password to KWallet");
+    }
+    explicit_bzero(secret.data(), secret.size());
+  }
+  return PAM_IGNORE;
+}
+
+// PAM forgets the password once authentication ends, so the auth line
+// holds on to it until a session opens, like pam_kwallet5 does
+const char *const PASSWORD_DATA = "linux_hello_password";
+
+void forget_password(pam_handle_t * /*pamh*/, void *data, int /*status*/) {
+  auto *password = static_cast<char *>(data);
+  explicit_bzero(password, strlen(password));
+  free(password);
+}
+
+/**
+ * "remember_password", last in the login screen's auth stack: hold on to
+ * the typed password. Never decides anything.
+ */
+auto hold_password(pam_handle_t *pamh) -> int {
+  const void *item = nullptr;
+  if (pam_get_item(pamh, PAM_AUTHTOK, &item) != PAM_SUCCESS ||
+      item == nullptr || static_cast<const char *>(item)[0] == '\0') {
+    return PAM_IGNORE;
+  }
+  char *copy = strdup(static_cast<const char *>(item));
+  if (copy != nullptr &&
+      pam_set_data(pamh, PASSWORD_DATA, copy, forget_password) !=
+          PAM_SUCCESS) {
+    forget_password(pamh, copy, 0);
+  }
+  return PAM_IGNORE;
+}
+
+/**
+ * "remember_password" in the session stack: a session only opens after the
+ * password was checked, so hand it to the service for KWallet. The service
+ * drops it unless auto-login is on for this user.
+ */
+auto remember_password(pam_handle_t *pamh) -> int {
+  std::string user = user_of(pamh);
+  const void *data = nullptr;
+  if (user.empty() || user == "root" ||
+      pam_get_data(pamh, PASSWORD_DATA, &data) != PAM_SUCCESS ||
+      data == nullptr) {
+    return PAM_IGNORE;
+  }
+  std::string secret(static_cast<const char *>(data));
+  if (!remember_login_secret(user, secret)) {
+    syslog(LOG_WARNING, "Could not keep the password for KWallet");
+  }
+  explicit_bzero(secret.data(), secret.size());
+  // Not needed any more
+  pam_set_data(pamh, PASSWORD_DATA, nullptr, nullptr);
+  return PAM_IGNORE;
+}
+
 PAM_EXTERN auto pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc,
                                     const char **argv) -> int {
+  if (has_argument(argc, argv, "kwallet")) {
+    return give_kwallet_password(pamh);
+  }
+  if (has_argument(argc, argv, "remember_password")) {
+    return hold_password(pamh);
+  }
   return identify(pamh, flags, argc, argv, true);
 }
 
 // Called by PAM when a session is started, such as by the su command
 PAM_EXTERN auto pam_sm_open_session(pam_handle_t *pamh, int flags, int argc,
                                     const char **argv) -> int {
+  if (has_argument(argc, argv, "remember_password")) {
+    return remember_password(pamh);
+  }
   return identify(pamh, flags, argc, argv, false);
 }
 

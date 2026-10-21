@@ -7,6 +7,7 @@ import asyncio
 import logging
 import os
 import pwd
+import subprocess
 import threading
 import time
 
@@ -17,9 +18,11 @@ import models as model_store
 import paths_factory
 import settings
 from daemon import confirm as confirm_module
+from daemon import secrets
 from daemon.access import ACTION_CONFIGURE, ACTION_ENROLL_SELF, ACTION_MANAGE_USERS, ACTION_PREVIEW
 from daemon.dispatch import Failed
 from engine import Engine
+from integration import encryption
 from integration.pam import PamError, PamIntegration
 from verification import VerificationResult
 
@@ -94,6 +97,8 @@ class Manager:
 			"SetSetting": ("sss", "", self.set_setting),
 			"ListCameras": ("", "a(sssbd)", self.list_cameras),
 			"Diagnose": ("", "a(sss)", self.diagnose),
+			"RememberLoginSecret": ("say", "", self.remember_login_secret),
+			"LoginSecret": ("s", "ay", self.login_secret),
 		}
 
 	# -- helpers -------------------------------------------------------------
@@ -152,6 +157,9 @@ class Manager:
 			"user": Variant("s", user or ""),
 			"user_has_models": Variant("b", has_models),
 			"busy": Variant("b", self.camera_lock.locked()),
+			"home_encrypted": Variant("b", _home_encrypted(user)),
+			# Auto-login is on but no login with the password happened yet
+			"login_secret_missing": Variant("b", bool(user) and self.pam.autologin_user() == user and not secrets.exists(user)),
 		}]
 
 	# -- verification ----------------------------------------------------------
@@ -406,7 +414,13 @@ class Manager:
 		await self.access.require(caller, ACTION_CONFIGURE)
 		try:
 			if enabled:
-				self.pam.enable(target)
+				user = None
+				if target == "auto-login":
+					# Logs in whoever turns it on, never someone else
+					user = self.access.user_name(caller.uid)
+					if not _auto_login_allowed(user):
+						raise PamError("logging in automatically needs an encrypted disk")
+				self.pam.enable(target, user=user)
 			else:
 				keep = []
 				if target == "lock-screen":
@@ -414,6 +428,8 @@ class Manager:
 					keep = kscreenlocker.users_preferring_face()
 				if keep:
 					log.warning("Keeping the lock screen's Face option: %s still start with it", ", ".join(keep))
+				if target == "auto-login" and self.pam.autologin_user():
+					secrets.forget(self.pam.autologin_user())
 				self.pam.disable(target, keep_kde_config=bool(keep))
 		except PamError as error:
 			log.warning("uid %d: could not %s %s: %s", caller.uid, "enable" if enabled else "disable", target, error)
@@ -421,6 +437,36 @@ class Manager:
 		log.info("uid %d: %s face unlock for %s", caller.uid, "enabled" if enabled else "disabled", target)
 		self.emit("TargetsChanged", "", [])
 		return []
+
+	# -- KWallet after logging in automatically, see daemon/secrets.py --------
+	def _keeps_login_secret(self, user):
+		return self.pam.autologin_user() == user and _auto_login_allowed(user)
+
+	async def remember_login_secret(self, caller, user, secret):
+		# From the PAM module when a session opens after a login with the
+		# password, as root
+		if caller.uid != 0:
+			raise Failed("PermissionDenied", "Only root may hand over a password")
+		self._check_user(user)
+		if not self._keeps_login_secret(user):
+			return []
+		try:
+			await asyncio.to_thread(secrets.store, user, bytes(secret))
+		except (secrets.SecretError, OSError, subprocess.SubprocessError) as error:
+			log.warning("Could not keep the password of %s for KWallet: %s", user, error)
+			return []
+		log.info("Kept the password of %s for KWallet", user)
+		return []
+
+	async def login_secret(self, caller, user):
+		# From the PAM module when logging in automatically, as root
+		if caller.uid != 0:
+			raise Failed("PermissionDenied", "Only root may ask for a password")
+		self._check_user(user)
+		if not self._keeps_login_secret(user):
+			return [b""]
+		secret = await asyncio.to_thread(secrets.load, user)
+		return [secret or b""]
 
 	# -- settings --------------------------------------------------------------
 	async def get_settings(self, caller):
@@ -586,6 +632,18 @@ def _snapshot(frames, kind, stats):
 		])
 	except OSError as error:
 		log.warning("Could not save a snapshot: %s", error)
+
+
+def _auto_login_allowed(user):
+	"""On a plain disk the kept password is readable from a USB stick"""
+	return _home_encrypted(user) or settings.load().getboolean("core", "insecure_auto_login", fallback=False)
+
+
+def _home_encrypted(user):
+	try:
+		return bool(user) and encryption.is_encrypted(pwd.getpwnam(user).pw_dir)
+	except (KeyError, OSError):
+		return False
 
 
 def _dlib_data_present():

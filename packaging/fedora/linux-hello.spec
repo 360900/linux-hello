@@ -129,12 +129,16 @@ fi
 %{_bindir}/linux-hello-cli
 %{_bindir}/linux-hello-webauthn
 %{_libexecdir}/linux-hello-daemon
+%{_libexecdir}/linux-hello-lock-guard
 %{_libdir}/linux-hello/
 %{_libdir}/linux-hello-runtime/
 %{_libdir}/security/pam_linux_hello.so
 %{_libdir}/qt6/plugins/plasma/kcms/systemsettings/kcm_linuxhello.so
 %{_unitdir}/linux-hello-daemon.service
 %{_unitdir}/linux-hello-webauthn.service
+%{_userunitdir}/linux-hello-lock-guard.service
+%{_userunitdir}/plasma-core.target.wants/linux-hello-lock-guard.service
+%dir %{_sysconfdir}/plasmalogin.conf.d
 %{_udevrulesdir}/70-linux-hello-webauthn.rules
 %{_datadir}/applications/kcm_linuxhello.desktop
 %{_datadir}/bash-completion/completions/linux-hello-cli

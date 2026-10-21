@@ -55,4 +55,15 @@ private:
   std::string error_;
 };
 
+/**
+ * KWallet after logging in automatically: the password typed at a login is
+ * handed to the service when the session opens, and asked back when
+ * logging in automatically. Root only; the service keeps it only while
+ * auto-login is on for user. login_secret is empty when there is none or
+ * the service cannot be reached.
+ */
+auto remember_login_secret(const std::string &user, const std::string &secret)
+    -> bool;
+auto login_secret(const std::string &user) -> std::string;
+
 #endif // DAEMON_CLIENT_H_

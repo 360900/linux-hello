@@ -12,6 +12,7 @@ KCM.SimpleKCM {
     readonly property var enabledTargets: kcm.targets.filter(target => target.enabled)
     readonly property var errors: kcm.checks.filter(check => check.state === "error")
     property bool offeredSetup: false
+    readonly property string encryptionGuide: "https://github.com/360900/linux-hello/blob/master/docs/disk-encryption.md"
 
     // Certainty values behind the strictness choices; lower is stricter
     readonly property var presets: [
@@ -213,10 +214,16 @@ KCM.SimpleKCM {
                 model: kcm.targets
 
                 delegate: ColumnLayout {
+                    id: targetItem
                     required property var modelData
 
                     Layout.fillWidth: true
                     spacing: 0
+
+                    // Keeps the password for KWallet, which an encrypted disk
+                    // keeps out of reach of a USB stick
+                    readonly property bool needsEncryption: modelData.id === "auto-login" && !kcm.status.home_encrypted
+                        && kcm.settings["core.insecure_auto_login"] !== "true"
 
                     QQC2.CheckBox {
                         id: targetBox
@@ -224,6 +231,7 @@ KCM.SimpleKCM {
                         checked: modelData.enabled
                         // Turning one on without a face would do nothing
                         enabled: modelData.available && (root.hasFaces || modelData.enabled)
+                            && (!targetItem.needsEncryption || modelData.enabled)
                         onToggled: {
                             kcm.setTarget(modelData.id, checked)
                             // Show the service's answer, not the click
@@ -237,6 +245,25 @@ KCM.SimpleKCM {
                         wrapMode: Text.Wrap
                         font: Kirigami.Theme.smallFont
                         opacity: 0.7
+                    }
+                    QQC2.Label {
+                        Layout.fillWidth: true
+                        visible: modelData.available && targetItem.needsEncryption
+                        leftPadding: targetBox.indicator.width + targetBox.spacing
+                        text: xi18nc("@info", "Needs an encrypted disk, so the password kept for KWallet cannot be read from a USB stick. <link url='%1'>How to set it up</link>", root.encryptionGuide)
+                        wrapMode: Text.Wrap
+                        font: Kirigami.Theme.smallFont
+                        opacity: 0.7
+                        onLinkActivated: link => Qt.openUrlExternally(link)
+                    }
+                    QQC2.Label {
+                        Layout.fillWidth: true
+                        visible: modelData.id === "auto-login" && modelData.enabled && kcm.status.login_secret_missing
+                        leftPadding: targetBox.indicator.width + targetBox.spacing
+                        text: i18n("Log out, wait a few seconds, and log in with your password once. From then on KWallet opens by itself.")
+                        wrapMode: Text.Wrap
+                        font: Kirigami.Theme.smallFont
+                        color: Kirigami.Theme.neutralTextColor
                     }
                 }
             }

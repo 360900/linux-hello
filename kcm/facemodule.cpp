@@ -220,6 +220,8 @@ void FaceModule::loadTargets()
         m_targets = Replies::targets(reply.arguments().value(0));
         Q_EMIT targetsChanged();
     }, {});
+    // Whether auto-login still waits for a login with the password
+    loadStatus();
 }
 
 void FaceModule::loadSettings()
