@@ -448,6 +448,21 @@ auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
     }
   }
 
+  // Before anything that can fail: a typed password goes on to pam_unix
+  // whatever happens to Linux Hello, and the login screen's line ends the
+  // stack on any other failure (see LOGIN_INSERT_LINE in integration/pam.py)
+  bool password_first = ask_auth_tok && takes_password_first(pamh);
+  if (password_first) {
+    const char *typed = nullptr;
+    int got = pam_get_authtok(pamh, PAM_AUTHTOK, &typed, nullptr);
+    if (got == PAM_CONV_AGAIN) {
+      return PAM_INCOMPLETE;
+    }
+    if (got != PAM_SUCCESS || (typed != nullptr && typed[0] != '\0')) {
+      return PAM_IGNORE;
+    }
+  }
+
   LayeredConfig config(VENDOR_CONFIG_FILE_PATH, CONFIG_FILE_PATH);
 
   // Error out if we could not read the config files
@@ -504,17 +519,6 @@ auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
   setlocale(LC_ALL, "");
   bindtextdomain(GETTEXT_PACKAGE, LOCALEDIR);
   textdomain(GETTEXT_PACKAGE);
-
-  bool password_first = ask_auth_tok && takes_password_first(pamh);
-  if (password_first) {
-    const char *typed = nullptr;
-    if (pam_get_authtok(pamh, PAM_AUTHTOK, &typed, nullptr) != PAM_SUCCESS) {
-      return PAM_IGNORE;
-    }
-    if (typed != nullptr && typed[0] != '\0') {
-      return PAM_IGNORE;
-    }
-  }
 
   if (needs_confirmation(pamh, config, no_password)) {
     // Not as a session module: there is no prompt to confirm with
@@ -737,10 +741,11 @@ auto give_kwallet_password(pam_handle_t *pamh) -> int {
   if (user.empty() || user == "root") {
     return PAM_IGNORE;
   }
-  std::string secret = login_secret(user);
+  std::string secret;
+  login_secret(user, secret);
   if (!secret.empty()) {
     if (pam_set_item(pamh, PAM_AUTHTOK, secret.c_str()) != PAM_SUCCESS) {
-      syslog(LOG_WARNING, "Could not hand the kept password to KWallet");
+      pam_syslog(pamh, LOG_WARNING, "Could not hand the kept password to KWallet");
     }
     explicit_bzero(secret.data(), secret.size());
   }
@@ -789,11 +794,9 @@ auto remember_password(pam_handle_t *pamh) -> int {
       data == nullptr) {
     return PAM_IGNORE;
   }
-  std::string secret(static_cast<const char *>(data));
-  if (!remember_login_secret(user, secret)) {
-    syslog(LOG_WARNING, "Could not keep the password for KWallet");
+  if (!remember_login_secret(user, static_cast<const char *>(data))) {
+    pam_syslog(pamh, LOG_WARNING, "Could not keep the password for KWallet");
   }
-  explicit_bzero(secret.data(), secret.size());
   // Not needed any more
   pam_set_data(pamh, PASSWORD_DATA, nullptr, nullptr);
   return PAM_IGNORE;

@@ -59,11 +59,12 @@ private:
  * KWallet after logging in automatically: the password typed at a login is
  * handed to the service when the session opens, and asked back when
  * logging in automatically. Root only; the service keeps it only while
- * auto-login is on for user. login_secret is empty when there is none or
- * the service cannot be reached.
+ * auto-login is on for user. login_secret leaves secret empty when there is
+ * none or the service cannot be reached; it fills the caller's string, so
+ * no copy is left behind to wipe. Messages are wiped when freed.
  */
-auto remember_login_secret(const std::string &user, const std::string &secret)
+auto remember_login_secret(const std::string &user, const char *secret)
     -> bool;
-auto login_secret(const std::string &user) -> std::string;
+void login_secret(const std::string &user, std::string &secret);
 
 #endif // DAEMON_CLIENT_H_

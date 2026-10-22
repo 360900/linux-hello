@@ -40,6 +40,13 @@ BEGINS = (BEGIN, WALLET_BEGIN)
 # line, so the password keeps working whatever happens to Linux Hello
 INSERT_LINE = "auth\t[success=done default=ignore]\t" + MODULE
 
+# Login screens hand over the form's password first (see pam/main.cc): a
+# typed one makes the module step aside, so it only reports a failed match
+# for an empty form. Ending the stack there keeps that empty password from
+# counting as a wrong one toward faillock's lockout as well.
+PASSWORD_FIRST_SERVICES = ("plasmalogin", "sddm")
+LOGIN_INSERT_LINE = "auth\t[success=done ignore=ignore auth_err=die default=ignore]\t" + MODULE
+
 # In a non-interactive stack nothing else may grant access: anything but a
 # match (including PAM_IGNORE) fails the stack
 OWN_STACK_LINE = "auth\t[success=ok default=die]\t" + MODULE + " no_password"
@@ -196,35 +203,46 @@ def gate_line(line):
 	return "-auth\t{}\t{}".format(parts[1], " ".join(parts[2:]))
 
 
-def insert_block(text, gates=()):
+def insert_block(text, gates=(), line=INSERT_LINE):
 	"""Insert our block, behind copies of the gates, before the first auth line"""
 	if has_block(text):
 		return text
 	lines = text.splitlines(keepends=True)
 	if lines and not lines[-1].endswith("\n"):
 		lines[-1] += "\n"
-	block = [BEGIN + "\n"] + [gate + "\n" for gate in gates] + [INSERT_LINE + "\n", END + "\n"]
+	block = [BEGIN + "\n"] + [gate + "\n" for gate in gates] + [line + "\n", END + "\n"]
 
-	for index, line in enumerate(lines):
-		if _is_auth_line(line):
+	for index, current in enumerate(lines):
+		if _is_auth_line(current):
 			return "".join(lines[:index] + block + lines[index:])
 	raise PamError("no auth line found")
+
+
+def _ours(line):
+	_kind, module = _module_of(line)
+	return bool(module) and os.path.basename(module) == MODULE
 
 
 def remove_block(text, begins=BEGINS):
 	"""Remove every block marked by one of begins, leaving the rest byte for byte"""
 	out = []
-	inside = False
+	block = None
 	for line in text.splitlines(keepends=True):
 		stripped = line.strip()
-		if stripped in begins:
-			inside = True
+		if block is None and stripped in begins:
+			block = []
 			continue
-		if inside:
+		if block is not None:
 			if stripped == END:
-				inside = False
+				block = None
+			else:
+				block.append(line)
 			continue
 		out.append(line)
+	if block is not None:
+		# The END line is gone: keep what follows, which is not ours, rather
+		# than cut the stack off at our block
+		out.extend(line for line in block if not _ours(line))
 	return "".join(out)
 
 
@@ -259,13 +277,7 @@ def insert_wallet_remember(text):
 
 def remove_legacy_lines(text):
 	"""Drop unmarked pam_linux_hello.so lines written by older versions"""
-	out = []
-	for line in text.splitlines(keepends=True):
-		_kind, module = _module_of(line)
-		if module and os.path.basename(module) == MODULE:
-			continue
-		out.append(line)
-	return "".join(out)
+	return "".join(line for line in text.splitlines(keepends=True) if not _ours(line))
 
 
 def build_own_stack(source_text, from_fingerprint):
@@ -432,10 +444,12 @@ class PamIntegration:
 			return []
 		if target == "auto-login":
 			if os.path.isfile(self._path(LOGIN_MANAGER)) and self._find("plasmalogin") and self._find("plasmalogin-autologin"):
+				# The drop-in last: it is what logs in, so it only appears
+				# once KWallet's lines are in place
 				return [
-					("plasmalogin.conf.d", "autologin"),
 					("plasmalogin-autologin", "wallet-release"),
 					("plasmalogin", "wallet-remember"),
+					("plasmalogin.conf.d", "autologin"),
 				]
 			return []
 		raise PamError("unknown target {}".format(target))
@@ -512,6 +526,9 @@ class PamIntegration:
 			entry["available"] = bool(plan)
 			entry["services"] = [service for service, kind in plan if kind not in ("kde-config", "autologin")]
 			entry["enabled"] = bool(plan) and all(self._service_enabled(s, k) for s, k in plan)
+			if target["id"] == "auto-login" and self.autologin_user() is not None:
+				# The drop-in alone logs in: shown as on, so it can be turned off
+				entry["enabled"] = True
 			result.append(entry)
 		return result
 
@@ -521,18 +538,40 @@ class PamIntegration:
 		if not plan:
 			raise PamError("target {} is not available on this system".format(target))
 		state = self._load_state()
-		for service, kind in plan:
-			if kind == "own":
-				self._enable_own(service, target, state)
-			elif kind == "kde-config":
-				self._enable_kde_config(target, state)
-			elif kind == "autologin":
-				self._enable_autologin(target, user, state)
-			elif kind.startswith("wallet-"):
-				self._enable_wallet(service, kind, target, state)
-			else:
-				self._enable_insert(service, target, state)
+		# Put back exactly what was there when a step fails, so a target is
+		# never left half on
+		paths = [self._kind_path(service, kind) for service, kind in plan]
+		before = {path: self._read(path) if os.path.isfile(path) else None for path in paths}
+		saved = json.loads(json.dumps(state))
+		try:
+			for service, kind in plan:
+				if kind == "own":
+					self._enable_own(service, target, state)
+				elif kind == "kde-config":
+					self._enable_kde_config(target, state)
+				elif kind == "autologin":
+					self._enable_autologin(target, user, state)
+				elif kind.startswith("wallet-"):
+					self._enable_wallet(service, kind, target, state)
+				else:
+					self._enable_insert(service, target, state)
+		except BaseException:
+			for path, text in before.items():
+				if text is None:
+					if os.path.isfile(path):
+						self._remove(path)
+				elif not os.path.isfile(path) or self._read(path) != text:
+					self._write(path, text)
+			self._save_state(saved)
+			raise
 		self._save_state(state)
+
+	def _kind_path(self, service, kind):
+		if kind == "kde-config":
+			return self._path(KSCREENLOCKER_CONFIG)
+		if kind == "autologin":
+			return self._path(AUTOLOGIN_FILE)
+		return self._etc(service)
 
 	def disable(self, target, keep_kde_config=False):
 		"""
@@ -542,16 +581,20 @@ class PamIntegration:
 		working as the PAM stack is gone.
 		"""
 		state = self._load_state()
-		for service, kind in self._plan(target):
-			if kind == "kde-config":
-				if keep_kde_config:
-					continue
-				path = self._path(KSCREENLOCKER_CONFIG)
-			elif kind == "autologin":
-				path = self._path(AUTOLOGIN_FILE)
-			else:
-				path = self._etc(service)
-			self._revert(path, state, (WALLET_BEGIN,) if kind.startswith("wallet-") else (BEGIN,))
+		plan = self._plan(target)
+		if target == "auto-login":
+			# Also when plasmalogin is gone: a drop-in left behind would log
+			# in without a password once it comes back. The drop-in first, so
+			# nothing logs in while KWallet's lines go.
+			plan = [
+				("plasmalogin.conf.d", "autologin"),
+				("plasmalogin-autologin", "wallet-release"),
+				("plasmalogin", "wallet-remember"),
+			]
+		for service, kind in plan:
+			if kind == "kde-config" and keep_kde_config:
+				continue
+			self._revert(self._kind_path(service, kind), state, (WALLET_BEGIN,) if kind.startswith("wallet-") else (BEGIN,))
 		self._save_state(state)
 
 	def reset(self):
@@ -560,8 +603,18 @@ class PamIntegration:
 		versions (unmarked lines and their .linux-hello-backup files).
 		Returns the list of files changed.
 		"""
-		state = self._load_state()
 		changed = []
+		# Before anything else, also with a broken manifest: a drop-in left
+		# behind would log in without a password
+		autologin = self._path(AUTOLOGIN_FILE)
+		if os.path.isfile(autologin):
+			self._forget_main_autologin(self.autologin_user())
+			self._remove(autologin)
+			changed.append(autologin)
+		try:
+			state = self._load_state()
+		except PamError:
+			state = {"version": 1, "files": {}}
 		for path in list(state["files"]):
 			if self._revert(path, state):
 				changed.append(path)
@@ -591,11 +644,7 @@ class PamIntegration:
 					self._write(path, cleaned)
 					changed.append(path)
 
-		# Files whose manifest entry was lost
-		autologin = self._path(AUTOLOGIN_FILE)
-		if self.autologin_user() is not None:
-			self._remove(autologin)
-			changed.append(autologin)
+		# A block whose manifest entry was lost
 		config = self._path(KSCREENLOCKER_CONFIG)
 		if os.path.isfile(config):
 			text = self._read(config)
@@ -622,12 +671,11 @@ class PamIntegration:
 				raise PamError("PAM service {} not found".format(service))
 			text = self._read(vendor)
 			action = "copied"
-		new_text = insert_block(remove_block(text, (BEGIN,)), self._gates(text))
+		line = LOGIN_INSERT_LINE if service in PASSWORD_FIRST_SERVICES else INSERT_LINE
+		new_text = insert_block(remove_block(text, (BEGIN,)), self._gates(text), line)
 		if new_text == text:
 			return
-		# A block from an older version or of another target: keep how the
-		# file came to be
-		action = state["files"].get(path, {}).get("action", action)
+		action = self._action(path, text, action, state)
 		self._write(path, new_text)
 		state["files"][path] = {
 			"action": action,
@@ -691,13 +739,12 @@ class PamIntegration:
 				raise PamError("PAM service {} not found".format(service))
 			text = self._read(vendor)
 			action = "copied"
-		if kind == "wallet-release":
-			new_text = insert_wallet_release(text)
-		else:
-			new_text = insert_wallet_remember(text)
+		# Older lines are replaced, so upgrades reach them
+		clean = remove_block(text, (WALLET_BEGIN,))
+		new_text = insert_wallet_release(clean) if kind == "wallet-release" else insert_wallet_remember(clean)
 		if new_text == text:
 			return
-		action = state["files"].get(path, {}).get("action", action)
+		action = self._action(path, text, action, state)
 		self._write(path, new_text)
 		state["files"][path] = {
 			"action": action,
@@ -705,23 +752,57 @@ class PamIntegration:
 			"sha256": _sha256(new_text),
 		}
 
+	def _action(self, path, text, action, state):
+		"""
+		How the file came to be: from the manifest while one of our blocks is
+		in it (an older version's, or another target's), else as found now.
+		A file without our blocks may be the admin's own, never ours to delete.
+		"""
+		entry = state["files"].get(path)
+		if entry is not None and any(has_block(text, begin) for begin in BEGINS):
+			return entry.get("action", action)
+		return action
+
 	def autologin_user(self):
 		"""The user our drop-in logs in, or None without one"""
 		path = self._path(AUTOLOGIN_FILE)
 		if not os.path.isfile(path):
 			return None
-		text = self._read(path)
-		if not text.startswith(AUTOLOGIN_HEADER):
-			return None
-		return _ini_group(text, "Autologin").get("User") or None
+		return _ini_group(self._read(path), "Autologin").get("User") or None
+
+	def _forget_main_autologin(self, user):
+		"""
+		The Login Screen settings save every value they see, ours from the
+		drop-in too, into plasmalogin.conf. Take that copy out again, only
+		while it names the same user.
+		"""
+		main = self._path(AUTOLOGIN_MAIN)
+		if not user or not os.path.isfile(main):
+			return
+		text = self._read(main)
+		out = []
+		group = None
+		for line in text.splitlines(keepends=True):
+			stripped = line.strip()
+			if stripped.startswith("[") and stripped.endswith("]"):
+				group = stripped[1:-1]
+			elif group == "Autologin" and "=" in stripped and not stripped.startswith("#"):
+				key, value = stripped.split("=", 1)
+				if key.strip() == "User" and value.strip() == user:
+					continue
+			out.append(line)
+		if "".join(out) != text:
+			self._write(main, "".join(out))
 
 	def _enable_autologin(self, target, user, state):
 		user = user or self.autologin_user()
 		if not user or user == "root" or not USER_NAME.fullmatch(user):
 			raise PamError("auto-login needs a regular user")
 		main = self._path(AUTOLOGIN_MAIN)
-		if os.path.isfile(main) and "User" in _ini_group(self._read(main), "Autologin"):
-			# Its value wins over ours, even an empty one
+		named = _ini_group(self._read(main), "Autologin").get("User") if os.path.isfile(main) else None
+		if named is not None and named != user:
+			# Its value wins over ours, even an empty one. The same user is
+			# our own copy, saved there by the Login Screen settings.
 			raise PamError("{} sets the user to log in automatically; change it in the Login Screen settings".format(main))
 		lines = [
 			AUTOLOGIN_HEADER + ": log in automatically, then lock the screen.",
@@ -751,7 +832,11 @@ class PamIntegration:
 			return False
 		text = self._read(path)
 		entry = state["files"].get(path)
-		whole = text.startswith(OWN_HEADER) or (path == self._path(AUTOLOGIN_FILE) and text.startswith(AUTOLOGIN_HEADER))
+		autologin = path == self._path(AUTOLOGIN_FILE)
+		if autologin:
+			self._forget_main_autologin(_ini_group(text, "Autologin").get("User"))
+		# The drop-in is ours by its name, whatever was edited in it
+		whole = autologin or text.startswith(OWN_HEADER)
 		if not whole:
 			partly = remove_block(text, begins)
 			if any(has_block(partly, begin) for begin in BEGINS):
