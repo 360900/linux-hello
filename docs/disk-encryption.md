@@ -67,13 +67,14 @@ expect an hour or more.
 
 4. Tell the boot process about it:
    - **Kernel command line**, in your bootloader's config (Limine:
-     `/boot/limine.conf`, systemd-boot: `/etc/kernel/cmdline`, GRUB:
+     `KERNEL_CMDLINE[default]` in `/etc/default/limine` if it exists, as on
+     CachyOS, else `/boot/limine.conf`; systemd-boot: `/etc/kernel/cmdline`, GRUB:
      `GRUB_CMDLINE_LINUX` in `/etc/default/grub`). Add
      `rd.luks.name=<UUID>=root` and set `root=/dev/mapper/root`.
      `<UUID>` is what `cryptsetup luksUUID /dev/nvme0n1p2` prints.
    - **Arch, CachyOS:** in `/etc/mkinitcpio.conf`, `HOOKS` must contain
      `systemd` and `sd-encrypt`, not `udev` and `encrypt`. Then run
-     `mkinitcpio -P`.
+     `limine-mkinitcpio` if you have it (CachyOS), else `mkinitcpio -P`.
    - **Fedora:** `dracut -f --regenerate-all`.
    - **Kubuntu:** add `root UUID=<UUID> none luks` to `/etc/crypttab`, then
      `update-initramfs -u -k all`.
