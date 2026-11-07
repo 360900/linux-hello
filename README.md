@@ -1,5 +1,7 @@
 # Linux Hello
 
+![Face Unlock in System Settings](docs/img/linux-hello-kcm.png)
+
 Face unlock for KDE Plasma, sudo and polkit.
 
 - Unlocks the Plasma lock screen, approves polkit prompts and sudo with your face.
