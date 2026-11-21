@@ -4,17 +4,18 @@
 # LINUX_HELLO_GIT overrides the repository, e.g. for local builds:
 #   LINUX_HELLO_GIT="git+file://$HOME/linux-hello#branch=remake" makepkg
 
-pkgname=linux-hello-git
-pkgver=0.1.0
+pkgbase=linux-hello-git
+pkgname=('linux-hello-git' 'linux-hello-kde-git' 'linux-hello-gnome-git')
+pkgver=0.1.0.r704.gc397dac
 pkgrel=1
-pkgdesc="Face unlock for KDE Plasma, sudo and polkit with IR cameras"
+pkgdesc="Face unlock for KDE Plasma, GNOME, sudo and polkit with IR cameras"
 arch=('x86_64' 'aarch64')
 url="https://github.com/360900/linux-hello"
 license=('GPL-3.0-only' 'MIT')
-depends=(
-	'dbus'
-	'gcc-libs'
-	'glibc'
+makedepends=(
+	'cmake'
+	'extra-cmake-modules'
+	'git'
 	'kcmutils'
 	'kconfig'
 	'kcoreaddons'
@@ -22,19 +23,29 @@ depends=(
 	'kirigami'
 	'libevdev'
 	'libinih'
-	'libxcrypt-compat'
+	'meson'
+	'ninja'
 	'pam'
-	'polkit'
+	'python'
 	'qt6-base'
 	'qt6-declarative'
 	'systemd-libs'
 )
-makedepends=('cmake' 'extra-cmake-modules' 'git' 'meson' 'ninja' 'python')
-provides=('linux-hello')
-conflicts=('linux-hello')
-install=linux-hello.install
 # The bundled CPython must not be stripped again
 options=('!strip' '!debug')
+
+# What the GNOME package takes out of the main install
+_gnome_files=(
+	usr/bin/linux-hello-settings
+	usr/lib/systemd/user/gnome-session.target.wants
+	usr/share/applications/io.github.linuxhello.FaceUnlock.desktop
+	usr/share/gnome-shell
+	usr/share/linux-hello/settings
+)
+# and the KDE package
+_kde_files=(
+	usr/lib/systemd/user/plasma-core.target.wants
+)
 
 source=("linux-hello::${LINUX_HELLO_GIT:-git+https://github.com/360900/linux-hello.git}")
 sha256sums=('SKIP')
@@ -147,12 +158,65 @@ build() {
 	cmake --build "$srcdir/build-kcm"
 }
 
-package() {
+package_linux-hello-git() {
+	pkgdesc="Face unlock for sudo, polkit and the login and lock screens: service, PAM module and CLI"
+	depends=(
+		'dbus'
+		'gcc-libs'
+		'glibc'
+		'libevdev'
+		'libinih'
+		'libxcrypt-compat'
+		'pam'
+		'polkit'
+		'systemd-libs'
+	)
+	optdepends=(
+		'linux-hello-kde-git: System Settings page for KDE Plasma'
+		'linux-hello-gnome-git: Face Unlock settings and lock screen support for GNOME'
+	)
+	provides=('linux-hello')
+	conflicts=('linux-hello')
+	install=linux-hello.install
+
 	meson install -C "$srcdir/build" --destdir "$pkgdir" --no-rebuild
-	DESTDIR="$pkgdir" cmake --install "$srcdir/build-kcm"
+	for path in "${_gnome_files[@]}" "${_kde_files[@]}"; do
+		rm -r "$pkgdir/$path"
+	done
 	install -Dm644 linux-hello/NOTICE "$pkgdir/usr/share/licenses/$pkgname/NOTICE"
 
 	# Bytecode for the paths it runs from, so nothing is written there later
 	"$pkgdir/usr/lib/linux-hello-runtime/python/bin/python3" -B -m compileall -f -q -j0 \
 		-s "$pkgdir" -p / "$pkgdir/usr/lib/linux-hello-runtime" "$pkgdir/usr/lib/linux-hello"
+}
+
+package_linux-hello-kde-git() {
+	pkgdesc="Face Unlock page in KDE System Settings"
+	depends=(
+		'linux-hello'
+		'kcmutils'
+		'kconfig'
+		'kcoreaddons'
+		'ki18n'
+		'kirigami'
+		'qt6-base'
+		'qt6-declarative'
+	)
+	provides=('linux-hello-kde')
+	conflicts=('linux-hello-kde')
+
+	DESTDIR="$pkgdir" cmake --install "$srcdir/build-kcm"
+	# Locks sessions that Plasma's login managers started without a password
+	install -d "$pkgdir/usr/lib/systemd/user/plasma-core.target.wants"
+	ln -s ../linux-hello-lock-guard.service "$pkgdir/usr/lib/systemd/user/plasma-core.target.wants/linux-hello-lock-guard.service"
+}
+
+package_linux-hello-gnome-git() {
+	pkgdesc="Face Unlock settings and lock screen extension for GNOME"
+	depends=('linux-hello' 'gjs' 'libadwaita')
+	optdepends=('gnome-shell: face unlock on the lock screen')
+	provides=('linux-hello-gnome')
+	conflicts=('linux-hello-gnome')
+
+	meson install -C "$srcdir/build" --destdir "$pkgdir" --no-rebuild --tags gnome
 }

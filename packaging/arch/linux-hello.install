@@ -1,5 +1,6 @@
 post_install() {
-	echo "Open System Settings > Security & Privacy > Face Unlock to add your face."
+	echo "Add your face in System Settings > Security & Privacy > Face Unlock (linux-hello-kde-git)"
+	echo "or in the Face Unlock app (linux-hello-gnome-git)."
 }
 
 post_upgrade() {

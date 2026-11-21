@@ -1,0 +1,5 @@
+usr/bin/linux-hello-settings
+usr/lib/systemd/user/gnome-session.target.wants
+usr/share/applications/io.github.linuxhello.FaceUnlock.desktop
+usr/share/gnome-shell
+usr/share/linux-hello/settings

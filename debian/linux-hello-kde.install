@@ -1,0 +1,3 @@
+usr/lib/*/qt6/plugins/plasma/kcms/systemsettings/kcm_linuxhello.so
+usr/lib/systemd/user/plasma-core.target.wants
+usr/share/applications/kcm_linuxhello.desktop

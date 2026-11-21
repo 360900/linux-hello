@@ -1,3 +1,9 @@
+linux-hello (0.1.1-1) unstable; urgency=medium
+
+  * Rebuild the bundled runtime without system library dependencies.
+
+ -- tarik <80833241+360900@users.noreply.github.com>  Sun, 22 Nov 2026 02:40:00 +0300
+
 linux-hello (0.1.0-1) unstable; urgency=medium
 
   * New packaging: system service, System Settings page, bundled Python

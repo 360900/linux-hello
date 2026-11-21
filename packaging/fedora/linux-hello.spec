@@ -12,9 +12,9 @@
 %global __provides_exclude_from ^%{_libdir}/linux-hello-runtime/
 
 Name:           linux-hello
-Version:        0.1.0
+Version:        0.1.1
 Release:        0.1%{?dist}
-Summary:        Face unlock for KDE Plasma, sudo and polkit with IR cameras
+Summary:        Face unlock for KDE Plasma, GNOME, sudo and polkit with IR cameras
 License:        GPL-3.0-only AND MIT
 URL:            https://github.com/360900/linux-hello
 Source0:        %{url}/archive/%{commit}/%{name}-%{commit}.tar.gz
@@ -77,15 +77,39 @@ BuildRequires:  systemd-devel
 BuildRequires:  systemd-rpm-macros
 
 Requires:       dbus
-Requires:       kf6-kirigami
 Requires:       libxcrypt-compat
 Requires:       polkit
+Suggests:       %{name}-kde = %{version}-%{release}
+Suggests:       %{name}-gnome = %{version}-%{release}
 %{?systemd_requires}
 
 %description
-Linux Hello unlocks the Plasma lock screen and authenticates sudo and polkit
-prompts with your face, using an infrared camera when there is one. Set it up
-in System Settings > Security & Privacy > Face Unlock.
+Linux Hello unlocks the lock screen and authenticates sudo and polkit prompts
+with your face, using an infrared camera when there is one. This package has
+the service, the PAM module and the command line tool; the settings come with
+%{name}-kde (System Settings on Plasma) and %{name}-gnome (the Face Unlock app).
+
+%package kde
+Summary:        Face Unlock page in KDE System Settings
+Requires:       %{name} = %{version}-%{release}
+Requires:       kf6-kirigami
+
+%description kde
+The Face Unlock page in System Settings > Security & Privacy, where faces are
+added and face unlock is turned on for the lock screen, sudo and polkit.
+
+%package gnome
+Summary:        Face Unlock settings and lock screen extension for GNOME
+BuildArch:      noarch
+Requires:       %{name} = %{version}-%{release}
+Requires:       gjs
+Requires:       libadwaita
+Recommends:     gnome-shell
+
+%description gnome
+The Face Unlock app, where faces are added and face unlock is turned on, and
+the GNOME Shell extension that looks for your face on the lock screen next to
+the password.
 
 %prep
 %autosetup -n %{name}-%{commit}
@@ -133,14 +157,12 @@ fi
 %{_libdir}/linux-hello/
 %{_libdir}/linux-hello-runtime/
 %{_libdir}/security/pam_linux_hello.so
-%{_libdir}/qt6/plugins/plasma/kcms/systemsettings/kcm_linuxhello.so
 %{_unitdir}/linux-hello-daemon.service
 %{_unitdir}/linux-hello-webauthn.service
 %{_userunitdir}/linux-hello-lock-guard.service
-%{_userunitdir}/plasma-core.target.wants/linux-hello-lock-guard.service
 %dir %{_sysconfdir}/plasmalogin.conf.d
+%dir %{_sysconfdir}/sddm.conf.d
 %{_udevrulesdir}/70-linux-hello-webauthn.rules
-%{_datadir}/applications/kcm_linuxhello.desktop
 %{_datadir}/bash-completion/completions/linux-hello-cli
 %{_datadir}/dbus-1/interfaces/io.github.LinuxHello1.xml
 %{_datadir}/dbus-1/system-services/io.github.LinuxHello1.service
@@ -148,11 +170,30 @@ fi
 %{_datadir}/dlib-data/
 %{_datadir}/icons/hicolor/scalable/apps/linux-hello.svg
 %{_datadir}/icons/hicolor/symbolic/apps/linux-hello-symbolic.svg
-%{_datadir}/linux-hello/
+%dir %{_datadir}/linux-hello
+%{_datadir}/linux-hello/config.ini
+%{_datadir}/linux-hello/emitter-devices.json
+%{_datadir}/linux-hello/logo.png
+%{_datadir}/linux-hello/openvino-models/
 %{_datadir}/polkit-1/actions/io.github.linuxhello.policy
 %{_docdir}/linux-hello/webauthn*.md
 %{_mandir}/man1/linux-hello-cli.1*
 
+%files kde
+%{_libdir}/qt6/plugins/plasma/kcms/systemsettings/kcm_linuxhello.so
+%{_userunitdir}/plasma-core.target.wants/linux-hello-lock-guard.service
+%{_datadir}/applications/kcm_linuxhello.desktop
+
+%files gnome
+%{_bindir}/linux-hello-settings
+%{_userunitdir}/gnome-session.target.wants/linux-hello-lock-guard.service
+%{_datadir}/applications/io.github.linuxhello.FaceUnlock.desktop
+%{_datadir}/gnome-shell/extensions/linux-hello@360900.github.io/
+%{_datadir}/linux-hello/settings/
+
 %changelog
+* Sun Nov 22 2026 tarik <80833241+360900@users.noreply.github.com> - 0.1.1-0.1
+- Rebuild the bundled runtime without system library dependencies
+
 * Tue Oct 20 2026 tarik <80833241+360900@users.noreply.github.com> - 0.1.0-0.1
 - New packaging: system service, System Settings page, bundled Python runtime
