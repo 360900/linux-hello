@@ -45,7 +45,7 @@ def service(fake_paths, private_bus, tmp_path, request):  # noqa: F811
 	from integration.pam import PamIntegration
 
 	root = str(tmp_path / "pamroot")
-	shutil.copytree(os.path.join(FIXTURES, "arch"), root)
+	shutil.copytree(os.path.join(FIXTURES, "arch"), root, symlinks=True)
 	allowed = set()
 
 	class TestAccess(Access):

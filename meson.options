@@ -10,3 +10,4 @@ option('py_sources_dir', type: 'string', value: '', description: 'Set the python
 option('python_path', type: 'string', value: '/usr/bin/python3', description: 'Set the path to the python executable')
 option('bundled_python_dir', type: 'string', value: '', description: 'Path to a prebuilt python runtime from tools/build_runtime.sh; installed to lib/linux-hello-runtime and used instead of python_path')
 option('with_webauthn', type: 'boolean', value: true, description: 'Install the optional WebAuthn authenticator (based on PR #1125)')
+option('with_gnome', type: 'boolean', value: true, description: 'Install the GNOME Shell extension and the Face Unlock settings app (gnome/)')

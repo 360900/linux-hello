@@ -44,6 +44,7 @@ py_sources = [
     'i18n.py',
     'integration/__init__.py',
     'integration/encryption.py',
+    'integration/gnomeshell.py',
     'integration/kscreenlocker.py',
     'integration/pam.py',
     'integration/security.py',
@@ -215,7 +216,7 @@ install_data(
     install_dir: systemd_unit_dir,
     install_tag: 'daemon',
 )
-# Locks sessions that plasmalogin started without a password (auto-login).
+# Locks sessions that plasmalogin or SDDM started without a password (auto-login).
 # Started with every Plasma session, it exits at once in all others.
 guard_path = get_option('prefix') / get_option('libexecdir') / 'linux-hello-lock-guard'
 install_data(
@@ -240,9 +241,10 @@ install_symlink(
     install_dir: user_unit_dir / 'plasma-core.target.wants',
     install_tag: 'daemon',
 )
-# Where the auto-login drop-in goes; the service may only write to
-# directories that exist
+# Where the auto-login drop-in goes, for plasmalogin and for SDDM; the
+# service may only write to directories that exist
 install_emptydir('/etc/plasmalogin.conf.d', install_tag: 'daemon')
+install_emptydir('/etc/sddm.conf.d', install_tag: 'daemon')
 
 install_data(
     'daemon/io.github.LinuxHello1.conf',

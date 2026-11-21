@@ -142,11 +142,11 @@ stick out.
 
 ## Then
 
-In **System Settings > Security & Privacy > Face Unlock**, turn on **Log in
-automatically**, then log out, wait a few seconds, and log in with your
-password once. From then on your computer boots straight to the lock screen
-with KWallet open, and the lock screen looks for your face. Fingerprint and
-password work there too.
+In **System Settings > Security & Privacy > Face Unlock** (Plasma) or the
+**Face Unlock** app (GNOME), turn on **Log in automatically**, then log out,
+wait a few seconds, and log in with your password once. From then on your
+computer boots straight to the lock screen with your keyring open, and the lock
+screen looks for your face. Fingerprint and password work there too.
 
 The disk now opens by itself on your computer, so the lock screen is what
 protects your session, as on Windows. For more, add a PIN to the TPM unlock

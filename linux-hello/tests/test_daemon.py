@@ -94,7 +94,7 @@ def env(fake_paths, tmp_path, monkeypatch):
 	for name in ("paths_factory", "daemon.manager", "linux_hello_daemon"):
 		sys.modules.pop(name, None)
 	root = tmp_path / "pamroot"
-	shutil.copytree(os.path.join(FIXTURES, "arch"), root)
+	shutil.copytree(os.path.join(FIXTURES, "arch"), root, symlinks=True)
 	return str(root)
 
 
@@ -752,6 +752,28 @@ def test_root_callers_never_pause(env, monkeypatch):
 	for _ in range(5):
 		run(manager.verify(caller(0), ME))
 	assert len(engine.verify_calls) == 5
+
+
+def test_unattended_root_callers_pause_like_the_lock_screen(env, monkeypatch):
+	# GDM runs the lock screen's gdm-face stack as root and restarts it
+	# whenever it fails; the module says so with VerifyUnattended
+	import models as model_store
+	from daemon import presence
+	from verification import VerificationResult as R
+
+	model_store.add(ME, "a", [[0.1]], 1)
+	manager, engine = make_scripted(env, [R.TIMEOUT_REACHED] * 3 + [R.SUCCESS])
+	waits = []
+	monkeypatch.setattr(presence, "wait_for_activity", lambda cancel, timeout: waits.append(timeout) or True)
+	for _ in range(3):
+		assert run(manager.verify_unattended(caller(0), ME))[0] == R.TIMEOUT_REACHED
+	assert run(manager.verify_unattended(caller(0), ME))[0] == R.SUCCESS
+	assert waits == [25.0]
+	assert len(engine.verify_calls) == 4
+	# Same access rule as Verify
+	from daemon.dispatch import Failed
+	with pytest.raises(Failed):
+		run(manager.verify_unattended(caller(MY_UID), OTHER))
 
 
 def test_success_and_time_reset_the_streak(env, monkeypatch):

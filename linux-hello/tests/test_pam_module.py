@@ -55,16 +55,18 @@ def stacks(directory):
 		"face": "auth [success=ok default=die] {} no_password\n".format(module),
 		# A target with the inserted block, followed by a stand-in password check
 		"sudo": "auth [success=done default=ignore] {}\nauth required pam_deny.so\n".format(module),
-		# The login screen, which reads the password before PAM starts
+		# The login screens, which read the password before PAM starts
 		"plasmalogin": "auth [success=done default=ignore] {}\nauth required pam_deny.so\n".format(module),
+		"sddm": "auth [success=done default=ignore] {}\nauth required pam_deny.so\n".format(module),
 	}
 	for name, text in stacks.items():
 		with open(os.path.join(directory, name), "w") as file:
 			file.write(text)
 
 
-def authenticate(harness, confdir, service_name, bus_address, answer=None, tty=None, **extra):
+def authenticate(harness, confdir, service_name, bus_address, answer=None, tty=None, environment=None, **extra):
 	env = dict(os.environ, DBUS_SYSTEM_BUS_ADDRESS=bus_address)
+	env.update(environment or {})
 	env.update({"HARNESS_" + key.upper(): value for key, value in extra.items()})
 	if answer is not None:
 		env["HARNESS_ANSWER"] = answer
@@ -97,27 +99,51 @@ def test_no_model_falls_through_to_the_password(service, harness, tmp_path):  # 
 	assert "result: Authentication failure" in result.stdout
 
 
-def test_login_screen_uses_a_typed_password(service, harness, tmp_path):  # noqa: F811
+@pytest.mark.parametrize("screen", ["plasmalogin", "sddm"])
+def test_login_screen_uses_a_typed_password(service, harness, tmp_path, screen):  # noqa: F811
 	import models as model_store
 
 	cli, _allowed, _root = service
 	model_store.add(ME, "office", [[0.5, 0.5]], 1)
 	stacks(str(tmp_path))
 
-	result, _seconds = authenticate(harness, str(tmp_path), "plasmalogin", cli.private_bus, answer="typed")
+	result, _seconds = authenticate(harness, str(tmp_path), screen, cli.private_bus, answer="typed")
 	# Left to the password check (pam_deny here) without a scan
 	assert "result: Authentication failure" in result.stdout
 	assert "Identified face" not in result.stdout
 
 
-def test_login_screen_scans_when_the_password_is_empty(service, harness, tmp_path):  # noqa: F811
+@pytest.mark.parametrize("screen", ["plasmalogin", "sddm"])
+def test_login_screen_scans_when_the_password_is_empty(service, harness, tmp_path, screen):  # noqa: F811
 	import models as model_store
 
 	cli, _allowed, _root = service
 	model_store.add(ME, "office", [[0.5, 0.5]], 1)
 	stacks(str(tmp_path))
 
-	result, _seconds = authenticate(harness, str(tmp_path), "plasmalogin", cli.private_bus, answer="")
+	result, _seconds = authenticate(harness, str(tmp_path), screen, cli.private_bus, answer="")
+	assert "result: Success" in result.stdout, result.stdout + result.stderr
+
+
+# GDM's unlock dialog is a reauthentication: there the face stack it runs next
+# to the password (gdm-face, through the shell extension) scans, the password
+# stack steps aside
+REAUTH = {"GDM_SESSION_FOR_REAUTH": "1"}
+
+
+def test_gdm_unlock_leaves_the_password_stack_to_the_face_stack(service, harness, tmp_path):  # noqa: F811
+	import models as model_store
+
+	cli, _allowed, _root = service
+	model_store.add(ME, "office", [[0.5, 0.5]], 1)
+	stacks(str(tmp_path))
+
+	result, seconds = authenticate(harness, str(tmp_path), "sudo", cli.private_bus, environment=REAUTH)
+	assert "result: Authentication failure" in result.stdout
+	assert "Identified face" not in result.stdout
+	assert seconds < 2
+
+	result, _seconds = authenticate(harness, str(tmp_path), "face", cli.private_bus, environment=REAUTH)
 	assert "result: Success" in result.stdout, result.stdout + result.stderr
 
 
@@ -263,8 +289,8 @@ def test_checks_in_front_still_apply(service, harness, tmp_path):  # noqa: F811
 	assert "result: Authentication failure" in result.stdout
 
 
-# -- KWallet after logging in automatically ----------------------------------
-def kwallet_stacks(directory):
+# -- the keyring after logging in automatically -------------------------------
+def kwallet_stacks(directory, argument="keyring"):
 	module = os.path.realpath(MODULE)
 	stacks = {
 		# The login screen: the form's password is read, checked (pam_permit
@@ -275,10 +301,11 @@ def kwallet_stacks(directory):
 			"-auth optional {0} remember_password\n"
 			"session required pam_permit.so\n"
 			"-session optional {0} remember_password\n").format(module),
-		# plasmalogin-autologin; pam_exec stands in for pam_kwallet5 and
-		# writes down the password it gets
-		"autologin": "auth optional {} kwallet\nauth optional pam_exec.so expose_authtok {}\nauth required pam_permit.so\n".format(
-			module, os.path.join(directory, "kwallet")),
+		# plasmalogin-autologin or gdm-autologin; pam_exec stands in for
+		# pam_kwallet5 or pam_gnome_keyring and writes down the password it
+		# gets
+		"autologin": "auth optional {} {}\nauth optional pam_exec.so expose_authtok {}\nauth required pam_permit.so\n".format(
+			module, argument, os.path.join(directory, "kwallet")),
 	}
 	kwallet = os.path.join(directory, "kwallet")
 	with open(kwallet, "w") as file:
@@ -297,6 +324,10 @@ def kwallet_got(directory):
 
 def auto_login_on(service, monkeypatch):
 	import daemon.manager
+	from daemon import secrets
+
+	# The real TPM would ask polkit for the seal; the copy on disk is enough
+	monkeypatch.setattr(secrets, "_can_seal", lambda: False)
 
 	cli, _allowed, _root = service
 	monkeypatch.setattr(daemon.manager, "_home_encrypted", lambda user: True)
@@ -315,6 +346,16 @@ def test_password_kept_at_login_and_given_back_when_logging_in_automatically(ser
 	assert "session: Success" in result.stdout, result.stdout + result.stderr
 	assert secrets.load(ME) == b"hunter2"
 
+	result, _seconds = authenticate(harness, str(tmp_path), "autologin", cli.private_bus)
+	assert "result: Success" in result.stdout
+	assert kwallet_got(tmp_path) == b"hunter2"
+
+
+@pytest.mark.as_root
+def test_the_older_kwallet_argument_still_works(service, harness, tmp_path, monkeypatch):  # noqa: F811
+	cli = auto_login_on(service, monkeypatch)
+	kwallet_stacks(str(tmp_path), argument="kwallet")
+	authenticate(harness, str(tmp_path), "plasmalogin", cli.private_bus, answer="hunter2", session="1")
 	result, _seconds = authenticate(harness, str(tmp_path), "autologin", cli.private_bus)
 	assert "result: Success" in result.stdout
 	assert kwallet_got(tmp_path) == b"hunter2"

@@ -22,16 +22,36 @@ DEFAULT_SAMPLES = 5
 SAMPLE_SPACING = 0.35
 # A face narrower than this share of the frame is "too far away"
 MIN_FACE_SHARE = 0.18
+# Unlit frames are normal with a flashing emitter; only a feed without a
+# usable frame for this long is reported as too dark
+DARK_PATIENCE = 0.5
+
+
+# A frame with fewer lit pixels than this share shows nothing, whatever the
+# exposure: the emitter is off, the lens covered or the room pitch dark
+BLACK_SHARE = 0.005
+LIT_LEVEL = 16
+
+
+def is_black(gsframe):
+	return np.count_nonzero(gsframe >= LIT_LEVEL) < gsframe.size * BLACK_SHARE
 
 
 class DarkFilter:
 	"""
 	Rejects unlit frames. Flashing IR emitters produce near-black frames
 	between lit ones. With a number as threshold, frames whose darkest
-	histogram bucket holds more than that percentage are skipped. With
-	"auto", a baseline is learned from accepted frames and frames much
-	darker than it are skipped, which needs no tuning per camera.
+	histogram bucket holds more than that percentage after the contrast
+	boost are skipped, as linux-hello-cli test shows it. With "auto",
+	frames much darker than the lightest recent one are skipped,
+	which needs no tuning per camera and follows the exposure as it
+	changes, for example when a face comes close.
 	"""
+
+	# Frames the auto mode compares against. Long enough to span a flashing
+	# emitter's unlit frames, short enough to follow an exposure change
+	# within a fraction of a second
+	WINDOW = 6
 
 	def __init__(self, threshold):
 		raw = str(threshold).strip().lower()
@@ -48,18 +68,14 @@ class DarkFilter:
 		return float(hist[0]) / total * 100
 
 	def accept(self, darkness):
-		if self.auto:
-			# The cap at 95 keeps fully unlit frames out even in very dim
-			# rooms where the lit baseline is high
-			if len(self.history) >= 5:
-				baseline = sorted(self.history)[len(self.history) // 2]
-				if darkness > min(95.0, baseline * 1.25 + 10):
-					return False
-			self.history.append(darkness)
-			if len(self.history) > 30:
-				self.history.pop(0)
-			return True
-		return darkness <= self.threshold
+		if not self.auto:
+			return darkness <= self.threshold
+		floor = min(self.history) if self.history else darkness
+		self.history.append(darkness)
+		del self.history[:-self.WINDOW]
+		# The cap at 95 keeps fully unlit frames out even in very dim rooms
+		# where the lit frames are dark too
+		return darkness <= min(95.0, floor * 1.25 + 10)
 
 
 class AmbientPairing:
@@ -172,7 +188,8 @@ class Engine:
 		def opener():
 			try:
 				opened["capture"] = self.open_camera()
-			except CameraError as error:
+			except BaseException as error:
+				# Raised again below, in the caller's thread
 				opened["error"] = error
 
 		thread = threading.Thread(target=opener, daemon=True)
@@ -224,19 +241,29 @@ class Engine:
 				stats.black += 1
 				yield None, None, 100.0
 				continue
-			gsframe = clahe.apply(gsframe)
 			if keep is not None and len(keep) < 3:
 				keep.append(frame)
 
+			# Measured before the contrast boost, which spreads any frame's
+			# histogram and hides how dark it really is; what auto compares
 			darkness = dark_filter.darkness(gsframe)
-			if darkness >= 100:
+			if is_black(gsframe):
 				stats.black += 1
 				yield None, None, darkness
 				continue
 
+			boosted = clahe.apply(gsframe)
+			if not dark_filter.auto:
+				# A number keeps the scale it was tuned on, the one
+				# linux-hello-cli test shows: after the contrast boost
+				darkness = dark_filter.darkness(boosted)
+			gsframe = boosted
+
 			stats.valid += 1
 			stats.darkness_total += darkness
-			if not dark_filter.accept(darkness):
+			# A subtracted pair is mostly black by design, and the pairing
+			# has already dropped the unlit frames
+			if not pairing.enabled and not dark_filter.accept(darkness):
 				stats.dark += 1
 				yield None, None, darkness
 				continue
@@ -380,6 +407,7 @@ class Engine:
 
 		try:
 			stats.started = time.monotonic()
+			last_lit = stats.started
 			report("searching")
 			for frame, gsframe, darkness in self._frames(capture, stats):
 				stats.elapsed = time.monotonic() - stats.started
@@ -388,8 +416,10 @@ class Engine:
 				if stats.elapsed > timeout:
 					return self._timed_out_result(stats), captured, stats
 				if frame is None:
-					report("too-dark", darkness=darkness)
+					if time.monotonic() - last_lit >= DARK_PATIENCE:
+						report("too-dark", darkness=darkness)
 					continue
+				last_lit = time.monotonic()
 				if on_frame is not None:
 					on_frame(gsframe)
 

@@ -1,34 +1,40 @@
 # Linux Hello
 
-Face unlock for KDE Plasma, sudo and polkit.
+Face unlock for KDE Plasma and GNOME, sudo and polkit.
 
-- Unlocks the Plasma lock screen, approves polkit prompts and sudo with your face.
+- Unlocks the lock screen, approves polkit prompts and sudo with your face.
 - Admin prompts and sudo scan only after you press Enter, so other programs can't use your face.
-- Can log you in at boot with KWallet open and lock the screen at once, so you only look at the camera.
+- Can log you in at boot with your keyring (KWallet, GNOME Keyring) open and lock the screen at once, so you only look at the camera. Works with the Plasma login manager, SDDM and GDM.
 - Prefers the infrared camera and switches its IR light on by itself.
-- Set up in System Settings. No terminal, no config files.
+- Set up in System Settings on Plasma or the Face Unlock app on GNOME. No terminal, no config files.
 - Your password always keeps working.
 
 ## Requirements
 
-- KDE Plasma 6 on Wayland. Face unlock on the lock screen needs Plasma 6.8 or
-  later. X11 is not supported: any program there can read your keys.
+- KDE Plasma 6 or GNOME 46 or later, on Wayland. Face unlock on the Plasma
+  lock screen needs Plasma 6.8 or later; on the GNOME lock screen it needs the
+  Linux Hello extension for GNOME Shell, which comes with the GNOME package.
+  X11 is not supported: any program there can read your keys.
 - A camera. An infrared (Windows Hello) camera works in the dark and is much
   harder to fool.
 
 ## Install
 
-There are no release packages yet. Build one from this repository:
+There are no release packages yet. Build them from this repository:
 
 ```sh
-# Arch, CachyOS
+# Arch, CachyOS: linux-hello-git, plus linux-hello-kde-git or linux-hello-gnome-git
 cd packaging/arch && makepkg -si
 ```
 
-Fedora (`packaging/fedora/linux-hello.spec`) and Debian/Kubuntu (`debian/`)
+Fedora (`packaging/fedora/linux-hello.spec`) and Debian/Ubuntu (`debian/`)
 packages build the same way; see `.github/workflows/check.yml` for the steps.
+Each build gives a core package with the service, PAM module and command line
+tool, a `-kde` package with the System Settings page and a `-gnome` package
+with the Face Unlock app and the GNOME Shell extension.
 
-Then open **System Settings > Security & Privacy > Face Unlock**.
+Then open **System Settings > Security & Privacy > Face Unlock** on Plasma, or
+the **Face Unlock** app on GNOME.
 
 ## Uninstall
 
@@ -46,9 +52,11 @@ linux-hello-cli doctor        # find problems
 
 ## Build from source
 
-Needs a C++20 compiler, `meson`, `ninja`, `cmake`, `extra-cmake-modules`, Qt 6,
-KDE Frameworks 6 (KCMUtils, Kirigami, I18n, Config, CoreAddons) and the
-headers for `pam`, `libevdev`, `libsystemd` and `inih`.
+Needs a C++20 compiler, `meson`, `ninja` and the headers for `pam`,
+`libevdev`, `libsystemd` and `inih`. The System Settings page also needs
+`cmake`, `extra-cmake-modules`, Qt 6 and KDE Frameworks 6 (KCMUtils, Kirigami,
+I18n, Config, CoreAddons). The GNOME parts are JavaScript and need `gjs` and
+`libadwaita` at run time.
 
 ```sh
 tools/build_runtime.sh --outdir build-runtime
@@ -61,7 +69,9 @@ cmake --build build-kcm && sudo cmake --install build-kcm
 
 `build_runtime.sh` downloads a Python runtime with OpenCV and dlib, pinned in
 `tools/runtime-manifest.json`. Without `-Dbundled_python_dir`, the system Python
-is used and needs OpenCV, dlib, numpy and dbus-fast.
+is used and needs OpenCV, dlib, numpy and dbus-fast. `-Dwith_gnome=false`
+leaves out the GNOME Shell extension and the Face Unlock app; the `cmake` steps
+are only for Plasma.
 
 Remove a source install with `sudo tools/uninstall.sh`.
 
@@ -83,7 +93,7 @@ See [SECURITY.md](SECURITY.md) for what Linux Hello protects against and how
 to report a vulnerability.
 
 Full support needs an encrypted disk: logging in automatically keeps your
-password to open KWallet, and without encryption anyone with your computer can
+password to open your keyring, and without encryption anyone with your computer can
 read it and your files from a USB stick. [Encrypt your disk](docs/disk-encryption.md)
 with LUKS, and add the TPM and Secure Boot to boot without typing anything.
 

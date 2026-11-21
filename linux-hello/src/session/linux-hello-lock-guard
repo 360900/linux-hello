@@ -1,22 +1,35 @@
 #!/bin/sh
 # Keeps a session that started without a password behind the lock screen.
 #
-# Runs at the start of every Plasma session and does nothing unless
-# plasmalogin logged in automatically (linux-hello-cli enable auto-login).
-# Then it locks the screen at once and turns on LockOnStart, so later boots
-# start locked before anything shows. When the screen is still not locked
-# after GRACE seconds, for example because the lock screen did not start,
-# the session is ended and the login screen comes back.
+# Runs at the start of every Plasma and GNOME session and does nothing
+# unless the display manager logged in automatically (linux-hello-cli enable
+# auto-login). Then it locks the screen at once; on Plasma it also turns on
+# LockOnStart, so later boots start locked before anything shows. When the
+# screen is still not locked after GRACE seconds, for example because the
+# lock screen did not start, the session is ended and the login screen comes
+# back.
 
 GRACE=15
-AUTOLOGIN_FILE=/etc/plasmalogin.conf.d/linux-hello.conf
+AUTOLOGIN_FILES="/etc/plasmalogin.conf.d/linux-hello.conf /etc/sddm.conf.d/linux-hello.conf"
+GDM_CONFIGS="/etc/gdm/custom.conf /etc/gdm3/custom.conf /etc/gdm3/daemon.conf"
+
+# The screen saver interfaces to lock through, as name:path; set below from
+# the desktop running this session
+SCREENSAVERS=
 
 locked() {
-	busctl --user call org.freedesktop.ScreenSaver /ScreenSaver org.freedesktop.ScreenSaver GetActive 2>/dev/null | grep -qx 'b true'
+	for screensaver in $SCREENSAVERS; do
+		name=${screensaver%%:*}
+		busctl --user call "$name" "${screensaver#*:}" "$name" GetActive 2>/dev/null | grep -qx 'b true' && return 0
+	done
+	return 1
 }
 
 lock() {
-	busctl --user call org.freedesktop.ScreenSaver /ScreenSaver org.freedesktop.ScreenSaver Lock >/dev/null 2>&1
+	for screensaver in $SCREENSAVERS; do
+		name=${screensaver%%:*}
+		busctl --user call "$name" "${screensaver#*:}" "$name" Lock >/dev/null 2>&1
+	done
 }
 
 lock_on_start() {
@@ -36,26 +49,65 @@ set_lock_on_start() {
 	fi
 }
 
-# This user's session that plasmalogin started without a password, if any
+# Whether Linux Hello turned on GDM's automatic login; one set up by hand or
+# in the Users settings is the admin's decision
+gdm_autologin_is_ours() {
+	for config in $GDM_CONFIGS; do
+		grep -qs '^# BEGIN linux-hello' "$config" && return 0
+	done
+	return 1
+}
+
+# This user's session that a display manager started without a password, if
+# any: its id and PAM service
 autologin_session() {
 	uid=$(id -u)
 	loginctl list-sessions --no-legend 2>/dev/null | while read -r id session_uid _rest; do
 		[ "$session_uid" = "$uid" ] || continue
-		[ "$(loginctl show-session "$id" -p Service --value 2>/dev/null)" = plasmalogin-autologin ] || continue
+		service=$(loginctl show-session "$id" -p Service --value 2>/dev/null)
+		case "$service" in
+			plasmalogin-autologin|sddm-autologin|gdm-autologin) ;;
+			*) continue ;;
+		esac
 		[ "$(loginctl show-session "$id" -p State --value 2>/dev/null)" = closing ] && continue
-		echo "$id"
+		echo "$id $service"
 		break
 	done
 }
 
-session=$(autologin_session)
-if [ -z "$session" ]; then
-	# Auto-login was turned off: stop starting locked after a password login
-	[ -e "$AUTOLOGIN_FILE" ] || set_lock_on_start off
-	exit 0
-fi
+set -- $(autologin_session)
+session=$1
+case "$2" in
+	plasmalogin-autologin|sddm-autologin)
+		;;
+	gdm-autologin)
+		gdm_autologin_is_ours || exit 0
+		;;
+	*)
+		# Auto-login was turned off: stop starting locked after a password login
+		for file in $AUTOLOGIN_FILES; do
+			[ -e "$file" ] && exit 0
+		done
+		set_lock_on_start off
+		exit 0
+		;;
+esac
 
-set_lock_on_start on
+# The lock screen is the desktop's, whichever display manager logged in: GDM
+# can start Plasma and SDDM can start GNOME
+case ":$XDG_CURRENT_DESKTOP:" in
+	*:GNOME:*)
+		SCREENSAVERS=org.gnome.ScreenSaver:/org/gnome/ScreenSaver
+		;;
+	*:KDE:*)
+		SCREENSAVERS=org.freedesktop.ScreenSaver:/ScreenSaver
+		set_lock_on_start on
+		;;
+	*)
+		# Not told: whichever answers
+		SCREENSAVERS="org.freedesktop.ScreenSaver:/ScreenSaver org.gnome.ScreenSaver:/org/gnome/ScreenSaver"
+		;;
+esac
 
 steps=0
 while [ "$steps" -lt $((GRACE * 4)) ]; do

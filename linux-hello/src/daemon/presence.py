@@ -1,6 +1,6 @@
 # Waiting for the user to come back.
 #
-# The Plasma lock screen restarts face authentication as soon as it fails,
+# Lock screens restart face authentication as soon as it fails,
 # so with nobody in front of the camera it would scan for as long as the
 # screen stays locked. After a few failed scans the service waits for input
 # activity instead, like Windows Hello: a key press, mouse or touchpad

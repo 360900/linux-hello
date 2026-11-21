@@ -153,6 +153,7 @@ def cmd_doctor(client, args):
 			kscreenlocker.stop_preferring_face()
 			checks.append(["lock-screen-choice", "warning",
 				_("Your lock screen started with Face while Face is off, which crashes it. Switched it back to the password.")])
+		checks += gnome_extension_checks(client)
 	copies = cli_copies()
 	if len(copies) > 1:
 		checks.append(["duplicates-cli", "warning",
@@ -280,6 +281,7 @@ def cmd_enable(client, args, enabled=True):
 	# go away: kscreenlocker crashes when the choice outlives the option
 	if not enabled and "lock-screen" in args.arguments:
 		lock_screen_choice(client, False)
+		gnome_extension_choice(client, False)
 	client.start_tty_agent()
 	try:
 		for target in args.arguments:
@@ -288,6 +290,59 @@ def cmd_enable(client, args, enabled=True):
 		client.stop_tty_agent()
 	if enabled and "lock-screen" in args.arguments:
 		lock_screen_choice(client, True)
+		gnome_extension_choice(client, True)
+
+
+def gnome_extension_checks(client):
+	"""In a GNOME session: whether the extension that scans on the lock screen runs"""
+	from integration import gnomeshell
+
+	if not gnomeshell.in_gnome():
+		return []
+	lock_screen = {t[0]: t for t in client.call("ListTargets")[0]}.get("lock-screen")
+	if lock_screen is None or not lock_screen[4] or "gdm-face" not in lock_screen[5] or not gnomeshell.installed():
+		return []
+	if gnomeshell.user_extensions_off():
+		return [["gnome-extension", "warning",
+			_("Extensions are switched off in the Extensions app, so the lock screen cannot use your face. Switch them on there.")]]
+	if not gnomeshell.enabled_for_user():
+		return [["gnome-extension", "warning",
+			_("The Linux Hello extension for GNOME Shell is off for you, so the lock screen cannot use your face. Turn it on with: linux-hello-cli enable lock-screen")]]
+	if gnomeshell.loaded() == gnomeshell.NOT_LOADED:
+		return [["gnome-extension", "warning",
+			_("GNOME Shell started before the Linux Hello extension was installed. Log out and in once.")]]
+	return []
+
+
+def gnome_extension_choice(client, enabled):
+	"""
+	The GNOME lock screen starts the face stack only through the Linux Hello
+	extension: turn it on for you along with the target, and off again with
+	it. It takes effect at once when the shell knows the extension, else at
+	the next login.
+	"""
+	from integration import gnomeshell
+
+	if os.geteuid() == 0 or not gnomeshell.in_gnome():
+		return
+	lock_screen = {t[0]: t for t in client.call("ListTargets")[0]}.get("lock-screen")
+	if lock_screen is None or "gdm-face" not in lock_screen[5]:
+		return
+	if enabled and not gnomeshell.installed():
+		print(_("The Linux Hello extension for GNOME Shell is not installed; the lock screen cannot use your face without it."))
+		return
+	try:
+		gnomeshell.set_enabled(enabled)
+	except (OSError, ValueError) as error:
+		print(_("Could not change the GNOME Shell extension: {}").format(error))
+		return
+	if enabled:
+		if gnomeshell.user_extensions_off():
+			print(_("The Linux Hello extension for GNOME Shell is turned on for you, but extensions are switched off in the Extensions app. Switch them on there for the lock screen to use your face."))
+		elif gnomeshell.loaded() == gnomeshell.NOT_LOADED:
+			print(_("The Linux Hello extension for GNOME Shell is turned on for you. Log out and in once for GNOME Shell to load it."))
+		else:
+			print(_("The Linux Hello extension for GNOME Shell is turned on for you. The lock screen looks for your face next to the password."))
 
 
 def lock_screen_choice(client, enabled):

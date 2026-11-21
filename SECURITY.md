@@ -29,8 +29,8 @@ Not covered:
   `sudo` alias or a fake password dialog.
 - Root, or anyone who can write to `/etc` or `/var/lib/linux-hello`.
 - With Log in automatically, your session starts before anyone is verified,
-  with KWallet open, and only the lock screen protects it. If the screen does
-  not lock within 15 seconds, the session is ended. Your password is kept to
-  open KWallet: readable by root only, sealed to the TPM when there is one,
-  and only on an encrypted disk.
+  with your keyring (KWallet, GNOME Keyring) open, and only the lock screen
+  protects it. If the screen does not lock within 15 seconds, the session is
+  ended. Your password is kept to open the keyring: readable by root only,
+  sealed to the TPM when there is one, and only on an encrypted disk.
 - Photos or masks in front of a regular (RGB) camera. Use an infrared camera.

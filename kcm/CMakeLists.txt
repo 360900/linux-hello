@@ -39,6 +39,4 @@ target_link_libraries(kcm_linuxhello PRIVATE
     KF6::KCMUtilsQuick
 )
 
-# Fallbacks; icon themes can provide their own "linux-hello"
-install(FILES icons/linux-hello.svg DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps)
-install(FILES icons/linux-hello-symbolic.svg DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/symbolic/apps)
+# The "linux-hello" icon is installed by the main meson build (data/icons)

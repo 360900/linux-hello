@@ -47,16 +47,20 @@ const auto MAX_RETRIES = 5;
 // (sudo, su, polkit, run0, anything unknown) grants more than that, so a
 // face only counts there after a physical Enter press, see needs_confirmation
 // "login" is not one: telnet and rlogin use it too.
-const std::array<const char *, 14> SESSION_SERVICES = {
+const std::array<const char *, 15> SESSION_SERVICES = {
     "kde",          "kde-fingerprint", "kde-face",     "kscreensaver",
-    "plasmalogin",  "sddm",            "gdm-password", "lightdm",
-    "greetd",       "xscreensaver",    "swaylock",     "hyprlock",
-    "i3lock",       "sddm-greeter"};
+    "plasmalogin",  "sddm",            "gdm-password", "gdm-face",
+    "lightdm",      "greetd",          "xscreensaver", "swaylock",
+    "hyprlock",     "i3lock",          "sddm-greeter"};
+
+// GDM runs the unlock dialog as a reauthentication of the user's session,
+// and marks the worker so (daemon/gdm-session-worker-job.c)
+const char *const GDM_REAUTH_VARIABLE = "GDM_SESSION_FOR_REAUTH";
 
 // Login screens that take the password in their own form and start PAM only
 // on submit, answering password prompts with what was typed. A typed
-// password is used as is, so it is checked and unlocks KWallet; an empty
-// form means the user wants their face.
+// password is used as is, so it is checked and unlocks the keyring; an
+// empty form means the user wants their face.
 const std::array<const char *, 2> PASSWORD_FIRST_SERVICES = {"plasmalogin",
                                                              "sddm"};
 
@@ -440,12 +444,21 @@ auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
   SyslogGuard syslog_guard;
 
   // "no_password": never prompt for a password in parallel, for stacks
-  // without one such as the lock screen's non-interactive kde-face
+  // without one such as the lock screens' non-interactive kde-face and
+  // gdm-face
   bool no_password = false;
   for (int i = 0; i < argc; i++) {
     if (std::string(argv[i]) == "no_password") {
       no_password = true;
     }
+  }
+
+  // On the GNOME lock screen face unlock is gdm-face's job, which the Linux
+  // Hello extension for GNOME Shell starts next to gdm-password; the
+  // password stack steps aside there so the two never scan at once. The
+  // login screen is no reauthentication, so gdm-password scans there.
+  if (!no_password && getenv(GDM_REAUTH_VARIABLE) != nullptr) {
+    return PAM_IGNORE;
   }
 
   // Before anything that can fail: a typed password goes on to pam_unix
@@ -535,7 +548,11 @@ auto identify(pam_handle_t *pamh, int flags, int argc, const char **argv,
     }
   }
 
-  VerifyRequest request(username, service_timeout(config));
+  // A non-interactive stack is restarted by the lock screen whenever it
+  // fails: the service pauses such scans after a few failures until there is
+  // input activity (daemon/manager.py)
+  VerifyRequest request(username, service_timeout(config),
+                        no_password ? "VerifyUnattended" : "Verify");
 
   // NOTE: We should replace mutex and condition_variable by atomic wait, but
   // it's too recent (C++20)
@@ -732,11 +749,12 @@ auto user_of(pam_handle_t *pamh) -> std::string {
 }
 
 /**
- * "kwallet", in the autologin stack in front of pam_kwallet5: no password
- * was typed, so hand pam_kwallet5 the one the service kept from the last
- * login with it, and KWallet opens as usual. Never decides anything.
+ * "keyring" (or "kwallet", as versions before 0.2 wrote it), in the
+ * autologin stack in front of pam_kwallet5 or pam_gnome_keyring: no password
+ * was typed, so hand the keyring module the one the service kept from the
+ * last login with it, and the keyring opens as usual. Never decides anything.
  */
-auto give_kwallet_password(pam_handle_t *pamh) -> int {
+auto give_keyring_password(pam_handle_t *pamh) -> int {
   std::string user = user_of(pamh);
   if (user.empty() || user == "root") {
     return PAM_IGNORE;
@@ -745,7 +763,8 @@ auto give_kwallet_password(pam_handle_t *pamh) -> int {
   login_secret(user, secret);
   if (!secret.empty()) {
     if (pam_set_item(pamh, PAM_AUTHTOK, secret.c_str()) != PAM_SUCCESS) {
-      pam_syslog(pamh, LOG_WARNING, "Could not hand the kept password to KWallet");
+      pam_syslog(pamh, LOG_WARNING,
+                 "Could not hand the kept password to the keyring");
     }
     explicit_bzero(secret.data(), secret.size());
   }
@@ -753,7 +772,7 @@ auto give_kwallet_password(pam_handle_t *pamh) -> int {
 }
 
 // PAM forgets the password once authentication ends, so the auth line
-// holds on to it until a session opens, like pam_kwallet5 does
+// holds on to it until a session opens, like the keyring modules do
 const char *const PASSWORD_DATA = "linux_hello_password";
 
 void forget_password(pam_handle_t * /*pamh*/, void *data, int /*status*/) {
@@ -783,8 +802,8 @@ auto hold_password(pam_handle_t *pamh) -> int {
 
 /**
  * "remember_password" in the session stack: a session only opens after the
- * password was checked, so hand it to the service for KWallet. The service
- * drops it unless auto-login is on for this user.
+ * password was checked, so hand it to the service for the keyring. The
+ * service drops it unless auto-login is on for this user.
  */
 auto remember_password(pam_handle_t *pamh) -> int {
   std::string user = user_of(pamh);
@@ -795,7 +814,8 @@ auto remember_password(pam_handle_t *pamh) -> int {
     return PAM_IGNORE;
   }
   if (!remember_login_secret(user, static_cast<const char *>(data))) {
-    pam_syslog(pamh, LOG_WARNING, "Could not keep the password for KWallet");
+    pam_syslog(pamh, LOG_WARNING,
+               "Could not keep the password for the keyring");
   }
   // Not needed any more
   pam_set_data(pamh, PASSWORD_DATA, nullptr, nullptr);
@@ -804,8 +824,9 @@ auto remember_password(pam_handle_t *pamh) -> int {
 
 PAM_EXTERN auto pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc,
                                     const char **argv) -> int {
-  if (has_argument(argc, argv, "kwallet")) {
-    return give_kwallet_password(pamh);
+  if (has_argument(argc, argv, "keyring") ||
+      has_argument(argc, argv, "kwallet")) {
+    return give_keyring_password(pamh);
   }
   if (has_argument(argc, argv, "remember_password")) {
     return hold_password(pamh);

@@ -33,4 +33,12 @@ paths_dict = {
     'version': meson.project_version(),
 }
 
+# Fallbacks; icon themes can provide their own "linux-hello"
+icondir = get_option('prefix') / get_option('datadir') / 'icons' / 'hicolor'
+install_data('data/icons/linux-hello.svg', install_dir: icondir / 'scalable' / 'apps', install_tag: 'meta')
+install_data('data/icons/linux-hello-symbolic.svg', install_dir: icondir / 'symbolic' / 'apps', install_tag: 'meta')
+
 subdir('linux-hello')
+if get_option('with_gnome')
+    subdir('gnome')
+endif

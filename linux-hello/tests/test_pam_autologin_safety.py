@@ -17,7 +17,7 @@ MAIN = "etc/plasmalogin.conf"
 
 def arch(tmp_path):
 	root = tmp_path / "arch"
-	shutil.copytree(os.path.join(FIXTURES, "arch"), root)
+	shutil.copytree(os.path.join(FIXTURES, "arch"), root, symlinks=True)
 	return str(root)
 
 
@@ -27,9 +27,13 @@ def snapshot(root):
 		for name in names:
 			path = os.path.join(directory, name)
 			relative = os.path.relpath(path, root)
-			if relative != pam.STATE_FILE:
-				with open(path, "rb") as file:
-					files[relative] = file.read()
+			if relative == pam.STATE_FILE:
+				continue
+			if os.path.islink(path):
+				files[relative] = os.readlink(path)
+				continue
+			with open(path, "rb") as file:
+				files[relative] = file.read()
 	return files
 
 
@@ -116,7 +120,7 @@ def test_drop_in_without_kwallet_lines_shows_as_on_and_refresh_repairs_it(tmp_pa
 	os.unlink(os.path.join(root, "etc/pam.d/plasmalogin"))
 	assert {t["id"]: t["enabled"] for t in integration.targets()}["auto-login"]
 	integration.refresh()
-	assert pam.WALLET_BEGIN in read(root, "etc/pam.d/plasmalogin")
+	assert pam.KEYRING_BEGIN in read(root, "etc/pam.d/plasmalogin")
 
 
 def test_disable_works_once_plasma_login_is_gone(tmp_path):
@@ -167,11 +171,11 @@ def test_older_kwallet_lines_are_brought_up_to_date(tmp_path):
 	integration = PamIntegration(root)
 	integration.enable("auto-login", user="alice")
 	path = "etc/pam.d/plasmalogin-autologin"
-	write(root, path, read(root, path).replace(pam.WALLET_RELEASE_LINE, "-auth optional pam_linux_hello.so old_kwallet"))
+	write(root, path, read(root, path).replace(pam.KEYRING_RELEASE_LINE, "-auth optional pam_linux_hello.so old_kwallet"))
 	integration.refresh()
 	text = read(root, path)
-	assert pam.WALLET_RELEASE_LINE in text and "old_kwallet" not in text
-	assert text.count(pam.WALLET_BEGIN) == 1
+	assert pam.KEYRING_RELEASE_LINE in text and "old_kwallet" not in text
+	assert text.count(pam.KEYRING_BEGIN) == 1
 
 
 def test_manifest_stays_valid_json_after_a_rollback(tmp_path):

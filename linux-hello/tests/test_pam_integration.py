@@ -19,6 +19,9 @@ def snapshot(root, skip_state=True):
 			relative = os.path.relpath(path, root)
 			if skip_state and relative == pam.STATE_FILE:
 				continue
+			if os.path.islink(path):
+				files[relative] = os.readlink(path)
+				continue
 			with open(path, "rb") as file:
 				files[relative] = file.read()
 	return files
@@ -32,41 +35,43 @@ def read(root, relative):
 @pytest.fixture(params=DISTROS)
 def system(request, tmp_path):
 	root = tmp_path / request.param
-	shutil.copytree(os.path.join(FIXTURES, request.param), root)
+	shutil.copytree(os.path.join(FIXTURES, request.param), root, symlinks=True)
 	return request.param, str(root)
 
 
 def tree(distro, tmp_path):
 	root = tmp_path / distro
-	shutil.copytree(os.path.join(FIXTURES, distro), root)
+	shutil.copytree(os.path.join(FIXTURES, distro), root, symlinks=True)
 	return str(root)
 
 
 # -- target resolution ------------------------------------------------------
 def test_targets_resolve_per_distro(tmp_path):
 	expected = {
+		# Plasma and GNOME side by side; what logs in automatically follows
+		# the display manager that boots
 		"arch": {
-			"lock-screen": ["kde-face"],
+			"lock-screen": ["kde-face", "gdm-face"],
 			"admin": ["polkit-1"],
 			"sudo": ["sudo"],
-			"login": ["plasmalogin"],
+			"login": ["plasmalogin", "gdm-password"],
 			"auto-login": ["plasmalogin-autologin", "plasmalogin"],
 		},
 		"fedora": {
-			"lock-screen": ["kde-face"],
+			"lock-screen": ["kde-face", "gdm-face"],
 			"admin": ["polkit-1"],
 			# sudo-i includes sudo on Fedora
 			"sudo": ["sudo"],
-			"login": ["sddm"],
-			"auto-login": [],
+			"login": ["sddm", "gdm-password"],
+			"auto-login": ["gdm-autologin", "gdm-password"],
 		},
 		"debian": {
 			# Greeter without kde-face support: patch the interactive stack
-			"lock-screen": ["kde"],
+			"lock-screen": ["kde", "gdm-face"],
 			"admin": ["polkit-1"],
 			"sudo": ["sudo", "sudo-i"],
-			"login": ["sddm"],
-			"auto-login": [],
+			"login": ["sddm", "gdm-password"],
+			"auto-login": ["gdm-autologin", "gdm-password"],
 		},
 	}
 	for distro, targets in expected.items():
@@ -154,7 +159,9 @@ def test_block_goes_before_control_group_line(tmp_path):
 	PamIntegration(root).enable("login")
 	lines = read(root, "etc/pam.d/sddm").splitlines()
 	assert lines[1] == pam.BEGIN
-	assert "pam_selinux_permit.so" in lines[4]
+	# password-auth's lockout check comes along through the substack
+	assert lines[2] == "-auth\trequired\tpam_faillock.so preauth silent"
+	assert "pam_selinux_permit.so" in lines[5]
 
 
 def test_insert_line_falls_through_on_failure():
@@ -275,6 +282,9 @@ def test_kde_face_from_fedora_substack(tmp_path):
 	auth = [line for line in text.splitlines() if line.startswith("auth")]
 	# Includes could pull in password modules: only our line remains
 	assert auth == [pam.OWN_STACK_LINE]
+	# but the lockout check inside the substack is copied in front of it
+	lines = text.splitlines()
+	assert lines[lines.index(pam.OWN_STACK_LINE) - 1] == "-auth\trequired\tpam_faillock.so preauth silent"
 	assert "account    include      fingerprint-auth" in text
 	assert "password   required     pam_deny.so" in text
 
@@ -337,6 +347,7 @@ def test_reset_keeps_commented_references(tmp_path):
 def test_unavailable_target_raises(tmp_path):
 	root = tree("arch", tmp_path)
 	os.unlink(os.path.join(root, "usr/lib/pam.d/plasmalogin"))
+	os.unlink(os.path.join(root, "usr/lib/pam.d/gdm-password"))
 	integration = PamIntegration(root)
 	assert not {t["id"]: t["available"] for t in integration.targets()}["login"]
 	with pytest.raises(PamError):
@@ -436,10 +447,17 @@ def test_disable_keeps_face_option_while_users_start_with_it(tmp_path):
 AUTOLOGIN = "etc/plasmalogin.conf.d/linux-hello.conf"
 
 
-def test_auto_login_only_with_plasma_login_manager(tmp_path):
-	available = lambda distro: {t["id"]: t["available"] for t in PamIntegration(tree(distro, tmp_path)).targets()}["auto-login"]
-	assert available("arch")
-	assert not available("fedora") and not available("debian")
+def test_auto_login_follows_the_display_manager(tmp_path):
+	def services(distro):
+		return {t["id"]: t["services"] for t in PamIntegration(tree(distro, tmp_path)).targets()}["auto-login"]
+	assert services("arch") == ["plasmalogin-autologin", "plasmalogin"]
+	assert services("fedora") == ["gdm-autologin", "gdm-password"]
+	# Without a display manager there is nothing to log in with
+	root = tree("debian", tmp_path)
+	os.unlink(os.path.join(root, "etc/systemd/system/display-manager.service"))
+	os.unlink(os.path.join(root, "usr/sbin/gdm3"))
+	os.unlink(os.path.join(root, "usr/bin/sddm"))
+	assert not {t["id"]: t["available"] for t in PamIntegration(root).targets()}["auto-login"]
 
 
 def test_auto_login_round_trip(tmp_path):
@@ -456,13 +474,13 @@ def test_auto_login_round_trip(tmp_path):
 
 	# The kept password goes to pam_kwallet5, before its auth line
 	autologin = read(root, "etc/pam.d/plasmalogin-autologin")
-	assert autologin.index(pam.WALLET_RELEASE_LINE) < autologin.index("pam_kwallet5.so")
+	assert autologin.index(pam.KEYRING_RELEASE_LINE) < autologin.index("pam_kwallet5.so")
 	# and is taken at a login with the password: held after every auth
 	# line, handed over once the session opens
 	login = read(root, "etc/pam.d/plasmalogin")
 	auth_lines = [line for line in login.splitlines() if line.lstrip("-").startswith("auth")]
-	assert auth_lines[-1] == pam.WALLET_HOLD_LINE
-	assert login.rstrip().endswith(pam.WALLET_REMEMBER_LINE + "\n" + pam.END)
+	assert auth_lines[-1] == pam.KEYRING_HOLD_LINE
+	assert login.rstrip().endswith(pam.KEYRING_REMEMBER_LINE + "\n" + pam.END)
 
 	integration.disable("auto-login")
 	assert snapshot(root) == before
@@ -524,7 +542,7 @@ def test_login_and_auto_login_share_the_login_screen_file(tmp_path, first):
 	integration.enable(first, user="alice")
 	integration.enable(second, user="alice")
 	text = read(root, "etc/pam.d/plasmalogin")
-	assert pam.BEGIN in text and pam.WALLET_BEGIN in text
+	assert pam.BEGIN in text and pam.KEYRING_BEGIN in text
 
 	# Turning one off leaves the other's block
 	integration.disable(first)
@@ -532,7 +550,7 @@ def test_login_and_auto_login_share_the_login_screen_file(tmp_path, first):
 	enabled = {t["id"]: t["enabled"] for t in integration.targets()}
 	assert enabled[second] and not enabled[first]
 	assert (pam.BEGIN in text) == (second == "login")
-	assert (pam.WALLET_BEGIN in text) == (second == "auto-login")
+	assert (pam.KEYRING_BEGIN in text) == (second == "auto-login")
 
 	# and the copy goes once both are off
 	integration.disable(second)

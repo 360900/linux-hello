@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Face Unlock
+Comment=Unlock your computer with your face
+Exec=linux-hello-settings
+Icon=linux-hello
+Terminal=false
+Categories=GNOME;GTK;Settings;Security;
+Keywords=face;biometric;camera;infrared;IR;Windows Hello;Linux Hello;howdy;login;unlock;sudo;polkit;
+StartupNotify=true
+NotShowIn=KDE;
