@@ -343,6 +343,26 @@ def test_diagnose_reports_missing_pieces(env):
 	assert checks["targets"] == "warning"
 
 
+def test_diagnose_warns_about_the_gnome_shell(env, monkeypatch):
+	from integration import gnomeshell
+
+	manager, _, _ = make_manager(env)
+	manager.pam.targets = lambda: [{
+		"id": "lock-screen", "label": "Lock screen", "description": "",
+		"available": True, "enabled": True, "services": ["gdm-face"],
+	}]
+	monkeypatch.setattr(gnomeshell, "shell_installed", lambda *arguments: True)
+	monkeypatch.setattr(gnomeshell, "installed", lambda *arguments: True)
+	monkeypatch.setattr(gnomeshell, "shell_supported", lambda: False)
+	monkeypatch.setattr(gnomeshell, "shell_version", lambda: (52, 0))
+	monkeypatch.setattr(gnomeshell, "supported_versions", lambda: ["46", "51"])
+	checks = {c[0]: c[1] for c in run(manager.diagnose(caller(MY_UID)))[0]}
+	assert checks["gnome-shell-version"] == "warning"
+	monkeypatch.setattr(gnomeshell, "installed", lambda *arguments: False)
+	checks = {c[0]: c[1] for c in run(manager.diagnose(caller(MY_UID)))[0]}
+	assert checks["gnome-extension"] == "warning"
+
+
 def test_cancel_sets_the_callers_event(env):
 	import threading
 

@@ -95,7 +95,7 @@ def test_loaded_reads_the_state(tmp_path, monkeypatch):
 	assert gnomeshell.loaded() == gnomeshell.NOT_LOADED
 	# Loaded, not turned on yet: the state right after turning it on
 	fake_tools(tmp_path / "d", monkeypatch, "@as []", info="({'uuid': <'x'>, 'state': <6.0>},)")
-	assert gnomeshell.loaded() == 6 != gnomeshell.NOT_LOADED
+	assert gnomeshell.loaded() == 6
 	fake_tools(tmp_path / "c", monkeypatch, "@as []")
 	assert gnomeshell.loaded() is None
 
@@ -115,3 +115,36 @@ def test_installed_looks_for_the_metadata(tmp_path):
 	import json
 	metadata = json.load(open(os.path.join(os.path.dirname(__file__), "..", "..", "gnome", "extension", "metadata.json")))
 	assert metadata["uuid"] == gnomeshell.UUID
+	assert isinstance(metadata["shell-version"], list)
+	assert metadata["gettext-domain"] == "linux-hello"
+
+
+def test_shell_version_runs_the_binary(tmp_path, monkeypatch):
+	bin_dir = tmp_path / "bin"
+	bin_dir.mkdir()
+	(bin_dir / "gnome-shell").write_text('#!/bin/sh\nprintf "GNOME Shell 52.1\\n"\n')
+	(bin_dir / "gnome-shell").chmod(0o755)
+	monkeypatch.setenv("PATH", str(bin_dir))
+	assert gnomeshell.shell_version() == (52, 1)
+
+
+def test_shell_version_without_the_binary(monkeypatch):
+	monkeypatch.setattr(gnomeshell.shutil, "which", lambda name: None)
+	assert gnomeshell.shell_version() is None
+
+
+def test_supported_versions_come_from_the_metadata(tmp_path):
+	(tmp_path / gnomeshell.UUID).mkdir()
+	assert gnomeshell.supported_versions(str(tmp_path)) is None
+	(tmp_path / gnomeshell.UUID / "metadata.json").write_text('{"shell-version": ["46", "51"]}')
+	assert gnomeshell.supported_versions(str(tmp_path)) == ["46", "51"]
+
+
+def test_shell_supported_compares_the_major(monkeypatch):
+	monkeypatch.setattr(gnomeshell, "supported_versions", lambda *arguments: ["46", "51"])
+	monkeypatch.setattr(gnomeshell, "shell_version", lambda: (52, 0))
+	assert gnomeshell.shell_supported() is False
+	monkeypatch.setattr(gnomeshell, "shell_version", lambda: (51, 3))
+	assert gnomeshell.shell_supported() is True
+	monkeypatch.setattr(gnomeshell, "shell_version", lambda: None)
+	assert gnomeshell.shell_supported() is None

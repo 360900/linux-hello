@@ -587,9 +587,18 @@ class Manager:
 		# The GNOME lock screen only starts gdm-face through the extension
 		from integration import gnomeshell
 		lock_screen = next((t for t in targets if t["id"] == "lock-screen"), None)
-		if lock_screen and "gdm-face" in lock_screen["services"] and gnomeshell.shell_installed() and not gnomeshell.installed():
-			add("gnome-extension", "warning",
-				"The Linux Hello extension for GNOME Shell is not installed, so the GNOME lock screen cannot use your face")
+		if lock_screen and "gdm-face" in lock_screen["services"] and gnomeshell.shell_installed():
+			if not gnomeshell.installed():
+				add("gnome-extension", "warning",
+					"The Linux Hello extension for GNOME Shell is not installed, so the GNOME lock screen cannot use your face")
+			elif gnomeshell.shell_supported() is False:
+				# A newer shell leaves the extension off, so unlock stops
+				# working without anything seeming wrong
+				version = gnomeshell.shell_version()
+				versions = gnomeshell.supported_versions()
+				add("gnome-shell-version", "warning",
+					"GNOME Shell {}.{} is not one of the versions the Linux Hello extension supports ({} to {}); the GNOME lock screen cannot use your face".format(
+						version[0], version[1], versions[0], versions[-1]))
 
 		ir_nodes = _ir_nodes()
 		if ir_nodes:

@@ -4,6 +4,7 @@
 
 import json
 import os
+import re
 import shutil
 import subprocess
 
@@ -127,3 +128,45 @@ def loaded():
 		return int(float(text[at + len(marker):].split(">", 1)[0]))
 	except ValueError:
 		return None
+
+
+def supported_versions(directory=SYSTEM_DIR):
+	"""
+	The GNOME Shell major versions the extension supports, from its
+	metadata.json, or None without it
+	"""
+	try:
+		with open(os.path.join(directory, UUID, "metadata.json"), encoding="utf-8") as file:
+			versions = json.load(file).get("shell-version")
+	except (OSError, ValueError):
+		return None
+	return versions if isinstance(versions, list) else None
+
+
+def shell_version():
+	"""The installed GNOME Shell's (major, minor), or None without one"""
+	binary = shutil.which("gnome-shell")
+	if binary is None:
+		return None
+	try:
+		result = subprocess.run([binary, "--version"], capture_output=True, text=True, timeout=30)
+	except subprocess.SubprocessError:
+		return None
+	if result.returncode != 0:
+		return None
+	match = re.search(r"(\d+)\.(\d+)", result.stdout)
+	return (int(match.group(1)), int(match.group(2))) if match else None
+
+
+def shell_supported():
+	"""
+	True or False when the installed GNOME Shell can load the extension,
+	None without a shell or when either version is unknown
+	"""
+	versions = supported_versions()
+	if versions is None:
+		return None
+	version = shell_version()
+	if version is None:
+		return None
+	return str(version[0]) in versions
