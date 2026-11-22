@@ -289,6 +289,28 @@ def test_display_manager_decides_the_auto_login(tmp_path):
 	assert integration.display_manager() == "gdm"
 
 
+def test_display_manager_names(tmp_path):
+	root = tree("arch", tmp_path)
+	integration = PamIntegration(root)
+	link = os.path.join(root, DM_LINK)
+	os.unlink(link)
+	# Ubuntu's gdm3 is GDM too
+	os.symlink("/usr/lib/systemd/system/gdm3.service", link)
+	assert integration.display_manager() == "gdm"
+	os.unlink(link)
+	os.symlink("/usr/lib/systemd/system/sddm.service", link)
+	assert integration.display_manager() == "sddm"
+	# Another display manager boots: configuring one installed next to it
+	# would do nothing now, and log in without a password after a switch
+	os.unlink(link)
+	os.symlink("/usr/lib/systemd/system/lightdm.service", link)
+	assert integration.display_manager() is None
+	# A dangling link still names what is meant to boot
+	os.unlink(link)
+	os.symlink("/nowhere/gdm.service", link)
+	assert integration.display_manager() == "gdm"
+
+
 def test_disable_auto_login_reaches_both_display_managers(tmp_path):
 	root = tree("arch", tmp_path)
 	before = snapshot(root)

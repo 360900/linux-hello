@@ -555,3 +555,16 @@ def test_login_and_auto_login_share_the_login_screen_file(tmp_path, first):
 	# and the copy goes once both are off
 	integration.disable(second)
 	assert snapshot(root) == before
+
+
+def test_include_cycles_and_depth_end(tmp_path):
+	root = tree("arch", tmp_path)
+	write(root, "etc/pam.d/loop-a", "auth include loop-b\nauth required pam_unix.so\n")
+	write(root, "etc/pam.d/loop-b", "auth include loop-a\n")
+	assert list(PamIntegration(root)._stack_lines("auth include loop-a", "auth")) == ["auth required pam_unix.so"]
+	# A chain deeper than the cap follows it and stops, rather than hanging
+	names = ["deep-{}".format(index) for index in range(pam.MAX_INCLUDE_DEPTH + 4)]
+	for index, name in enumerate(names[:-1]):
+		write(root, "etc/pam.d/" + name, "auth include {}\n".format(names[index + 1]))
+	write(root, "etc/pam.d/" + names[-1], "auth required pam_unix.so\n")
+	assert list(PamIntegration(root)._stack_lines("auth include " + names[0], "auth")) == []
