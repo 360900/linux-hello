@@ -1,7 +1,7 @@
 // Translations, when there are any: strings stay English until then
 import Gettext from 'gettext';
 
-Gettext.bindtextdomain('linux-hello', '/usr/share/locale');
+Gettext.bindtextdomain('linux-hello', '@locale_dir@');
 Gettext.textdomain('linux-hello');
 
 export const _ = Gettext.gettext;

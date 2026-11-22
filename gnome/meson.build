@@ -17,12 +17,22 @@ settings_dir = datadir / 'linux-hello' / 'settings'
 install_data(
     'settings/enroll.js',
     'settings/faceframe.js',
-    'settings/i18n.js',
     'settings/main.js',
     'settings/pages.js',
     'settings/service.js',
     'settings/shellextension.js',
     'settings/window.js',
+    install_dir: settings_dir,
+    install_tag: 'gnome',
+)
+# The locale dir follows the install prefix, so the app finds its
+# translations wherever meson installed it
+install_data(
+    configure_file(
+        input: 'settings/i18n.js',
+        output: 'i18n.js',
+        configuration: configuration_data({'locale_dir': datadir / 'locale'}),
+    ),
     install_dir: settings_dir,
     install_tag: 'gnome',
 )

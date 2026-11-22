@@ -1,5 +1,6 @@
 {
     "uuid": "linux-hello@360900.github.io",
+    "gettext-domain": "linux-hello",
     "name": "Linux Hello",
     "description": "Face unlock on the lock screen, next to the password",
     "url": "https://github.com/360900/linux-hello",

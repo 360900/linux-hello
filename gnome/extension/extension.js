@@ -13,14 +13,11 @@
 
 import GLib from 'gi://GLib';
 
-import {Extension, InjectionManager} from 'resource:///org/gnome/shell/extensions/extension.js';
+import {Extension, InjectionManager, gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const FACE_SERVICE = 'gdm-face';
 // Only the lock-screen target creates it; without it there is nothing to start
 const FACE_STACK = '/etc/pam.d/gdm-face';
-// Shown under the password field while the camera looks, like the
-// fingerprint hint
-const HINT = '(or look at the camera)';
 
 function faceStackInstalled() {
     return GLib.file_test(FACE_STACK, GLib.FileTest.IS_REGULAR);
@@ -38,6 +35,9 @@ function wantsFace(verifier) {
 
 export default class LinuxHelloExtension extends Extension {
     enable() {
+        // Shown under the password field while the camera looks, like the
+        // fingerprint hint
+        this._hint = _('(or look at the camera)');
         this._injections = new InjectionManager();
         this._patch().catch(error => console.error(`Linux Hello: ${error}`));
     }
@@ -69,6 +69,7 @@ export default class LinuxHelloExtension extends Extension {
     _patchUserVerifier(Util) {
         const proto = Util.ShellUserVerifier.prototype;
         const {MessageType} = Util;
+        const hint = this._hint;
 
         this._injections.overrideMethod(proto, '_beginVerification',
             original => function (...args) {
@@ -81,7 +82,7 @@ export default class LinuxHelloExtension extends Extension {
             original => function (client, serviceName) {
                 original.call(this, client, serviceName);
                 if (serviceName === FACE_SERVICE)
-                    this._queueMessage(serviceName, HINT, MessageType.HINT);
+                    this._queueMessage(serviceName, hint, MessageType.HINT);
             });
 
         // A scan without a match is no failure of the dialog: the password
@@ -104,6 +105,7 @@ export default class LinuxHelloExtension extends Extension {
     _patchAuthServices(Legacy, Verifier) {
         const proto = Legacy.AuthServicesLegacy.prototype;
         const {MessageType} = Verifier;
+        const hint = this._hint;
         const start = services => {
             services._startService(FACE_SERVICE, services._cancellable)
                 .catch(error => console.debug(`Linux Hello: ${FACE_SERVICE} not started: ${error}`));
@@ -120,7 +122,7 @@ export default class LinuxHelloExtension extends Extension {
             original => function (serviceName) {
                 original.call(this, serviceName);
                 if (serviceName === FACE_SERVICE)
-                    this.emit('queue-message', {serviceName, message: HINT, messageType: MessageType.HINT});
+                    this.emit('queue-message', {serviceName, message: hint, messageType: MessageType.HINT});
             });
 
         // Not through _verificationFailed: that clears the password field
