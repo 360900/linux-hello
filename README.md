@@ -33,6 +33,10 @@ Each build gives a core package with the service, PAM module and command line
 tool, a `-kde` package with the System Settings page and a `-gnome` package
 with the Face Unlock app and the GNOME Shell extension.
 
+Switching from a source install to a package? Run
+`sudo tools/uninstall.sh` first: files a source install left behind are
+unknown to pacman and stop the install with a file conflict.
+
 Then open **System Settings > Security & Privacy > Face Unlock** on Plasma, or
 the **Face Unlock** app on GNOME.
 
