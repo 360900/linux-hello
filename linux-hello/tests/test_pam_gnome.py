@@ -263,6 +263,16 @@ def test_reset_removes_the_gdm_block_without_a_manifest(tmp_path):
 	assert pam.KEYRING_BEGIN not in read(root, "etc/pam.d/gdm-password")
 
 
+def test_reset_removes_a_gdm_config_we_created(tmp_path):
+	root = gnome_only("fedora", tmp_path)
+	os.unlink(os.path.join(root, GDM_CONF))
+	integration = PamIntegration(root)
+	integration.enable("auto-login", user="alice")
+	changed = integration.reset()
+	assert not os.path.exists(os.path.join(root, GDM_CONF))
+	assert os.path.join(root, GDM_CONF) in changed
+
+
 def test_display_manager_decides_the_auto_login(tmp_path):
 	root = tree("arch", tmp_path)
 	integration = PamIntegration(root)

@@ -966,9 +966,18 @@ class PamIntegration:
 				changed.append(autologin)
 		for relative in GDM_CONFIGS:
 			path = self._path(relative)
-			if os.path.isfile(path) and has_block(self._read(path)):
-				self._write(path, remove_block(self._read(path), (BEGIN,)))
-				changed.append(path)
+			if not os.path.isfile(path):
+				continue
+			text = self._read(path)
+			if not has_block(text):
+				continue
+			cleaned = remove_block(text, (BEGIN,))
+			if cleaned.strip() in ("", "[{}]".format(GDM_GROUP)):
+				# Only our [daemon] group was in a file we created
+				self._remove(path)
+			else:
+				self._write(path, cleaned)
+			changed.append(path)
 		try:
 			state = self._load_state()
 		except PamError:
