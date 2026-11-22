@@ -37,6 +37,13 @@ jobs:
       - name: Packaging sources match the manifest
         run: python3 tools/update_packaging.py --check
 
+      # The GNOME Shell extension and the settings app are plain JavaScript
+      - name: JavaScript parses
+        run: |
+          for file in gnome/extension/extension.js gnome/settings/*.js; do
+            node --input-type=module --check < "$file"
+          done
+
   # Build each package, install it and check the bundled runtime loads
   arch:
     runs-on: ubuntu-24.04
@@ -46,7 +53,7 @@ jobs:
         run: |
           pacman -Syu --noconfirm --needed git cmake extra-cmake-modules meson ninja python \
             kcmutils kconfig kcoreaddons ki18n kirigami libevdev libinih libxcrypt-compat \
-            pam polkit qt6-base qt6-declarative
+            pam polkit qt6-base qt6-declarative gjs libadwaita
 
       - uses: actions/checkout@v4
         with:
@@ -111,6 +118,6 @@ jobs:
           done
           mk-build-deps -i -r -t "apt-get -y --no-install-recommends" debian/control
           dpkg-buildpackage -b -uc -us
-          apt-get install -y ../linux-hello_*.deb
+          apt-get install -y ../linux-hello_*.deb ../linux-hello-kde_*.deb ../linux-hello-gnome_*.deb
           linux-hello-cli version
           /usr/lib/x86_64-linux-gnu/linux-hello-runtime/python/bin/python3 -c "import cv2, dlib, dbus_fast, numpy"

@@ -1,0 +1,3 @@
+#!/bin/sh
+# Face Unlock, the Linux Hello settings for GNOME (gnome/settings)
+exec gjs -m @settings_dir@/main.js "$@"

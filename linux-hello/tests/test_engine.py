@@ -1,5 +1,6 @@
 import configparser
 import itertools
+import types
 
 import numpy as np
 import pytest
@@ -48,13 +49,15 @@ class FakeInternal:
 class FakeCapture:
 	"""Plays a list of shots, repeating the last one forever"""
 
-	def __init__(self, shots, fail_after=None):
+	def __init__(self, shots, fail_after=None, alternating=False):
 		self.shots = shots
 		self.index = -1
 		self.current = None
 		self.released = False
 		self.fail_after = fail_after
 		self.internal = FakeInternal()
+		if alternating:
+			self.emitter = types.SimpleNamespace(alternating=True)
 
 	def read_frame(self):
 		self.index += 1
@@ -107,8 +110,8 @@ def config(**values):
 	return parser
 
 
-def make(shots, fail_after=None, open_error=None, **values):
-	capture = FakeCapture(shots, fail_after)
+def make(shots, fail_after=None, open_error=None, alternating=False, **values):
+	capture = FakeCapture(shots, fail_after, alternating)
 
 	def capture_factory(_config):
 		if open_error:
@@ -145,10 +148,46 @@ def test_verify_times_out_with_best_certainty():
 
 
 def test_verify_only_black_frames_is_too_dark():
-	engine, _capture, _ = make([Shot(black=True)], timeout=0.05)
+	# A few hot pixels do not make an unlit frame worth looking at
+	speckled = Shot(black=True)
+	speckled.image[0, :10] = 255
+	engine, _capture, _ = make([Shot(black=True), speckled], timeout=0.05)
 	result, stats = engine.verify([ME])
 	assert result == VerificationResult.TOO_DARK
 	assert stats.black == stats.frames
+
+
+def test_verify_follows_an_exposure_change():
+	# A face coming close darkens the background. Those frames are not
+	# unlit frames and must not be skipped for good
+	shots = [Shot(dark_share=0.1)] * 6 + [Shot([(face(), ME)], dark_share=0.6)]
+	engine, _capture, _ = make(shots)
+	result, stats = engine.verify([ME])
+	assert result == VerificationResult.SUCCESS
+	assert stats.dark == DarkFilter.WINDOW
+
+
+def test_a_numeric_threshold_keeps_the_scale_of_the_test_window():
+	# A dim room: every pixel in the darkest bucket before the contrast boost,
+	# about 76% after it, which is what linux-hello-cli test shows and what
+	# a number in the config was tuned against
+	shot = Shot([(face(), ME)])
+	dim = np.tile(np.linspace(17, 31, WIDTH).astype(np.uint8), (HEIGHT, 1))
+	shot.image = cv2.cvtColor(dim, cv2.COLOR_GRAY2BGR)
+	engine, _capture, _ = make([shot], dark_threshold=80)
+	result, stats = engine.verify([ME])
+	assert result == VerificationResult.SUCCESS
+	assert stats.dark == 0
+
+
+def test_pairing_skips_the_dark_filter():
+	# A subtracted pair is mostly black by design: a threshold that would
+	# reject it as unlit does not apply once the pairing works
+	shots = [Shot(black=True), Shot([(face(), ME)], dark_share=0.9)]
+	engine, _capture, _ = make(shots, alternating=True, dark_threshold=60)
+	result, stats = engine.verify([ME])
+	assert result == VerificationResult.SUCCESS
+	assert (stats.black, stats.dark) == (1, 0)
 
 
 def test_verify_fixed_threshold_rejects_dark_frames():
@@ -213,6 +252,15 @@ def test_backend_is_loaded_once_per_dimension():
 	assert created[0]["enrolled_dims"] == {3}
 
 
+def test_camera_opener_errors_propagate():
+	def broken_camera(_config):
+		raise RuntimeError("v4l2 module missing")
+
+	engine = Engine(config(), broken_camera, lambda **kwargs: StubBackend(None))
+	with pytest.raises(RuntimeError, match="v4l2"):
+		engine.verify([ME])
+
+
 def test_backend_error_releases_camera():
 	capture = FakeCapture([Shot()])
 
@@ -242,7 +290,9 @@ def test_enroll_guides_until_samples_are_captured(monkeypatch):
 	assert result == VerificationResult.SUCCESS
 	assert encodings == [ME, ME, ME]
 	states = [u["state"] for u in updates]
-	assert states[:5] == ["searching", "no-face", "multiple-faces", "too-far", "too-dark"]
+	assert states[:4] == ["searching", "no-face", "multiple-faces", "too-far"]
+	# One unlit frame between lit ones is a flashing emitter, not darkness
+	assert "too-dark" not in states
 	assert states[-3:] == ["captured"] * 3
 	assert updates[-1]["sample"] == 3 and updates[-1]["samples"] == 3
 	left, top, right, bottom = updates[-1]["face"]
@@ -257,8 +307,9 @@ def test_frames_are_shown_before_their_progress(monkeypatch):
 	events = []
 	engine.enroll(samples=2, on_progress=lambda u: events.append(u["state"]),
 		on_frame=lambda gsframe: events.append(gsframe.shape))
-	# The black frame is not shown, each lit frame comes before its report
-	assert events == ["searching", "too-dark", (HEIGHT, WIDTH), "captured", (HEIGHT, WIDTH), "captured"]
+	# The black frame is neither shown nor reported, each lit frame comes
+	# before its report
+	assert events == ["searching", (HEIGHT, WIDTH), "captured", (HEIGHT, WIDTH), "captured"]
 
 
 def test_verify_shows_frames_it_looks_at():
@@ -279,6 +330,21 @@ def test_enroll_spaces_samples(monkeypatch):
 	assert encodings == [ME]
 
 
+def test_enroll_reports_darkness_only_when_it_lasts(monkeypatch):
+	monkeypatch.setattr(engine_module, "SAMPLE_SPACING", 0)
+	shots = [Shot(black=True), Shot(black=True), Shot([(face(), ME)])]
+	engine, _capture, _ = make(shots)
+	states = []
+	engine.enroll(samples=1, on_progress=lambda u: states.append(u["state"]))
+	assert states == ["searching", "captured"]
+
+	monkeypatch.setattr(engine_module, "DARK_PATIENCE", 0)
+	engine, _capture, _ = make(shots)
+	states = []
+	engine.enroll(samples=1, on_progress=lambda u: states.append(u["state"]))
+	assert states == ["searching", "too-dark", "too-dark", "captured"]
+
+
 def test_enroll_in_the_dark():
 	engine, _capture, _ = make([Shot(black=True)])
 	result, encodings, _stats = engine.enroll(samples=1, timeout=0.05)
@@ -287,13 +353,16 @@ def test_enroll_in_the_dark():
 
 
 # -- dark filter -------------------------------------------------------------
-def test_auto_dark_filter_learns_baseline():
+def test_auto_dark_filter_follows_the_exposure():
 	dark = DarkFilter("auto")
 	for _ in range(5):
 		assert dark.accept(20.0)
-	# Baseline 20: frames over 35 (20 * 1.25 + 10) are unlit emitter frames
+	# Lightest recent frame 20: frames over 35 (20 * 1.25 + 10) are unlit
 	assert dark.accept(34.0)
 	assert not dark.accept(60.0)
+	# Once the lighter frames have left the window, 60 is the new normal
+	results = [dark.accept(60.0) for _ in range(DarkFilter.WINDOW)]
+	assert results == [False] * (DarkFilter.WINDOW - 1) + [True]
 
 
 def test_auto_dark_filter_caps_at_95():

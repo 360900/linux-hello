@@ -56,7 +56,7 @@ private:
 };
 
 /**
- * KWallet after logging in automatically: the password typed at a login is
+ * The keyring after logging in automatically: the password typed at a login is
  * handed to the service when the session opens, and asked back when
  * logging in automatically. Root only; the service keeps it only while
  * auto-login is on for user. login_secret leaves secret empty when there is

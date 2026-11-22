@@ -1,9 +1,10 @@
-# The login password kept for opening KWallet after logging in automatically.
+# The login password kept for opening the keyring after logging in
+# automatically.
 #
-# KWallet is encrypted with the user's password and opens at login when
-# pam_kwallet5 gets it. Logging in automatically types no password, so the
-# PAM module hands pam_kwallet5 this copy instead, taken from the last login
-# with the password.
+# KWallet and GNOME Keyring are encrypted with the user's password and open
+# at login when pam_kwallet5 or pam_gnome_keyring gets it. Logging in
+# automatically types no password, so the PAM module hands them this copy
+# instead, taken from the last login with the password.
 #
 # Kept only while auto-login is on and only on an encrypted disk, where a
 # copy of the disk is unreadable. Files are root only, and sealed to the

@@ -54,6 +54,16 @@
       <arg name="certainty" type="d" direction="out"/>
     </method>
 
+    <!-- Verify from a non-interactive stack the lock screen restarts
+         whenever it fails (gdm-face, kde-face): after a few failed scans the
+         camera stays off until there is input activity, also for root
+         callers. Same access rule as Verify. -->
+    <method name="VerifyUnattended">
+      <arg name="user" type="s" direction="in"/>
+      <arg name="result" type="u" direction="out"/>
+      <arg name="certainty" type="d" direction="out"/>
+    </method>
+
     <!-- Own face: polkit io.github.linuxhello.enroll-self. Other users:
          io.github.linuxhello.manage-users. An empty label picks one.
          Progress arrives as EnrollProgress, sent to the caller only. -->
@@ -122,8 +132,9 @@
     </method>
 
     <!-- Root only. The password typed at a login, kept while auto-login is
-         on for user and the disk is encrypted, so KWallet opens after
-         logging in automatically. LoginSecret is empty without one. -->
+         on for user and the disk is encrypted, so the keyring (KWallet,
+         GNOME Keyring) opens after logging in automatically. LoginSecret
+         is empty without one. -->
     <!-- For the caller: home_encrypted b, secure_boot s (on, off, setup,
          legacy, unknown), tpm u (2, 1, or 0 without one), tpm_unlock b -->
     <method name="SecurityStatus">

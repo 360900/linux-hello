@@ -35,15 +35,45 @@ Depends:
  dbus,
  libcrypt1,
  polkitd,
+ ${misc:Depends},
+ ${shlibs:Depends},
+Suggests:
+ linux-hello-gnome,
+ linux-hello-kde,
+Description: face unlock for the lock screen, sudo and polkit
+ Linux Hello unlocks the lock screen and authenticates sudo and polkit
+ prompts with your face, using an infrared camera when there is one. This
+ package has the service, the PAM module and the command line tool; the
+ settings come with linux-hello-kde (System Settings on Plasma) and
+ linux-hello-gnome (the Face Unlock app).
+ .
+ Ships its own Python runtime with OpenCV and dlib.
+
+Package: linux-hello-kde
+Architecture: amd64 arm64
+Depends:
+ linux-hello (= ${binary:Version}),
  qml6-module-org-kde-kcmutils,
  qml6-module-org-kde-kirigami,
  qml6-module-qtquick-controls,
  qml6-module-qtquick-layouts,
  ${misc:Depends},
  ${shlibs:Depends},
-Description: face unlock for KDE Plasma, sudo and polkit
- Linux Hello unlocks the Plasma lock screen and authenticates sudo and
- polkit prompts with your face, using an infrared camera when there is one.
- Set it up in System Settings > Security & Privacy > Face Unlock.
- .
- Ships its own Python runtime with OpenCV and dlib.
+Description: face unlock page in KDE System Settings
+ The Face Unlock page in System Settings > Security & Privacy, where faces
+ are added and face unlock is turned on for the lock screen, sudo and polkit.
+
+Package: linux-hello-gnome
+Architecture: all
+Depends:
+ gir1.2-adw-1,
+ gir1.2-gtk-4.0,
+ gjs,
+ linux-hello (>= ${source:Version}),
+ ${misc:Depends},
+Recommends:
+ gnome-shell,
+Description: face unlock settings and lock screen extension for GNOME
+ The Face Unlock app, where faces are added and face unlock is turned on,
+ and the GNOME Shell extension that looks for your face on the lock screen
+ next to the password.

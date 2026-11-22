@@ -63,6 +63,12 @@ class Manager:
 		self.emit = emit
 		self.engine = engine or Engine(settings.load())
 		self.pam = pam or PamIntegration()
+		# A login manager's file whose rewrite a crash or power loss cut short
+		try:
+			for path in self.pam.recover():
+				log.warning("Put back %s, whose rewrite was cut short", path)
+		except OSError as error:
+			log.error("Could not put back a file whose rewrite was cut short: %s", error)
 		self.camera_lock = asyncio.Lock()
 		# sender -> threading.Event of the request it may cancel
 		self.running = {}
@@ -84,6 +90,7 @@ class Manager:
 			"GetStatus": ("", "a{sv}", self.get_status),
 			"Verify": ("s", "ud", self.verify),
 			"VerifyNow": ("s", "ud", self.verify_now),
+			"VerifyUnattended": ("s", "ud", self.verify_unattended),
 			"VerifyConfirmed": ("su", "ud", self.verify_confirmed),
 			"Enroll": ("ss", "uu", self.enroll),
 			"Cancel": ("", "", self.cancel),
@@ -164,7 +171,7 @@ class Manager:
 		}]
 
 	# -- verification ----------------------------------------------------------
-	async def verify(self, caller, user, pausable=True, preview=False):
+	async def verify(self, caller, user, pausable=True, preview=False, unattended=False):
 		# Root (the PAM module in sudo, polkit, the login screen) or the user
 		# for themselves (the PAM module in the lock screen greeter)
 		if caller.uid != 0 and not self.access.is_self(caller, user):
@@ -177,9 +184,10 @@ class Manager:
 		if not encodings:
 			return [int(VerificationResult.NO_FACE_MODEL), -1.0]
 
-		# Callers other than root verifying themselves are the lock screen,
-		# which keeps retrying while nobody is in front of the camera
-		lock_screen = pausable and caller.uid != 0
+		# Callers other than root verifying themselves are the Plasma lock
+		# screen, which keeps retrying while nobody is in front of the
+		# camera; GDM does the same as root and says so (VerifyUnattended)
+		lock_screen = pausable and (caller.uid != 0 or unattended)
 		if lock_screen and self._streak(user) >= PAUSE_AFTER:
 			resumed, cancelled = await self._wait_for_activity(caller, user)
 			if not resumed:
@@ -222,6 +230,12 @@ class Manager:
 		# Only someone at the computer gets to see the camera picture.
 		preview = await self.access.authorized(caller, ACTION_PREVIEW)
 		return await self.verify(caller, user, pausable=False, preview=preview)
+
+	async def verify_unattended(self, caller, user):
+		# From the PAM module in a non-interactive stack the lock screen
+		# restarts whenever it fails (gdm-face, kde-face): after a few failed
+		# scans the camera waits for input activity, whoever asks
+		return await self.verify(caller, user, unattended=True)
 
 	async def verify_confirmed(self, caller, user, requester):
 		# Admin prompts and sudo, from the PAM module running as root in sudo
@@ -449,7 +463,7 @@ class Manager:
 			"tpm_unlock": Variant("b", security.tpm_unlock()),
 		}]
 
-	# -- KWallet after logging in automatically, see daemon/secrets.py --------
+	# -- the keyring after logging in automatically, see daemon/secrets.py ----
 	def _keeps_login_secret(self, user):
 		return self.pam.autologin_user() == user and _auto_login_allowed(user)
 
@@ -464,9 +478,9 @@ class Manager:
 		try:
 			await asyncio.to_thread(secrets.store, user, bytes(secret))
 		except (secrets.SecretError, OSError, subprocess.SubprocessError) as error:
-			log.warning("Could not keep the password of %s for KWallet: %s", user, error)
+			log.warning("Could not keep the password of %s for the keyring: %s", user, error)
 			return []
-		log.info("Kept the password of %s for KWallet", user)
+		log.info("Kept the password of %s for the keyring", user)
 		return []
 
 	async def login_secret(self, caller, user):
@@ -569,6 +583,13 @@ class Manager:
 			add("targets", "ok", "Used for: " + ", ".join(t["label"] for t in targets))
 		else:
 			add("targets", "warning", "Face unlock is not enabled anywhere yet")
+
+		# The GNOME lock screen only starts gdm-face through the extension
+		from integration import gnomeshell
+		lock_screen = next((t for t in targets if t["id"] == "lock-screen"), None)
+		if lock_screen and "gdm-face" in lock_screen["services"] and gnomeshell.shell_installed() and not gnomeshell.installed():
+			add("gnome-extension", "warning",
+				"The Linux Hello extension for GNOME Shell is not installed, so the GNOME lock screen cannot use your face")
 
 		ir_nodes = _ir_nodes()
 		if ir_nodes:

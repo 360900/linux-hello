@@ -2,7 +2,7 @@
 # Security checklist in System Settings. Read only; nothing here changes the
 # system.
 #
-# - An encrypted disk keeps files, and the password kept for KWallet, out of
+# - An encrypted disk keeps files, and the password kept for the keyring, out of
 #   reach of a USB stick (integration/encryption.py).
 # - Secure Boot lets only signed bootloaders and kernels start, so a TPM
 #   bound to it unlocks the disk for this system only.

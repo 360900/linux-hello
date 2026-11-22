@@ -1,0 +1,8 @@
+{
+    "uuid": "linux-hello@360900.github.io",
+    "name": "Linux Hello",
+    "description": "Face unlock on the lock screen, next to the password",
+    "url": "https://github.com/360900/linux-hello",
+    "shell-version": ["46", "47", "48", "49", "50", "51"],
+    "session-modes": ["user", "unlock-dialog"]
+}

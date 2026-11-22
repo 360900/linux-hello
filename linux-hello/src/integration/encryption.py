@@ -1,6 +1,6 @@
 # Whether a folder is on an encrypted disk (LUKS, through dm-crypt).
 #
-# Features that keep a secret on disk, like a key that opens KWallet after a
+# Features that keep a secret on disk, like a key that opens the keyring after a
 # face match, are only safe there: on a plain disk anyone who boots the
 # computer from a USB stick reads them.
 
