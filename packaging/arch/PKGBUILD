@@ -219,7 +219,7 @@ package_linux-hello-kde-git() {
 package_linux-hello-gnome-git() {
 	pkgdesc="Face Unlock settings and lock screen extension for GNOME"
 	depends=('linux-hello' 'gjs' 'libadwaita')
-	optdepends=('gnome-shell: face unlock on the lock screen')
+	optdepends=('gnome-shell>=46: face unlock on the lock screen')
 	provides=('linux-hello-gnome')
 	conflicts=('linux-hello-gnome')
 

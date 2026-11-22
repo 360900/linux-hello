@@ -104,7 +104,7 @@ BuildArch:      noarch
 Requires:       %{name} = %{version}-%{release}
 Requires:       gjs
 Requires:       libadwaita
-Recommends:     gnome-shell
+Recommends:     gnome-shell >= 46
 
 %description gnome
 The Face Unlock app, where faces are added and face unlock is turned on, and
@@ -193,6 +193,8 @@ fi
 
 %changelog
 * Sun Nov 22 2026 tarik <80833241+360900@users.noreply.github.com> - 0.1.1-0.1
+- GNOME lock screen support: the Face Unlock settings app and a GNOME Shell
+  extension, in a new linux-hello-gnome package
 - Rebuild the bundled runtime without system library dependencies
 
 * Tue Oct 20 2026 tarik <80833241+360900@users.noreply.github.com> - 0.1.0-0.1

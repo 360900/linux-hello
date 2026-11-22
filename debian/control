@@ -72,7 +72,7 @@ Depends:
  linux-hello (>= ${source:Version}),
  ${misc:Depends},
 Recommends:
- gnome-shell,
+ gnome-shell (>= 46),
 Description: face unlock settings and lock screen extension for GNOME
  The Face Unlock app, where faces are added and face unlock is turned on,
  and the GNOME Shell extension that looks for your face on the lock screen
