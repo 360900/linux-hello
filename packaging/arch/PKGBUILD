@@ -6,7 +6,7 @@
 
 pkgbase=linux-hello-git
 pkgname=('linux-hello-git' 'linux-hello-kde-git' 'linux-hello-gnome-git')
-pkgver=0.1.1.r705.gcd53f44
+pkgver=0.1.1
 pkgrel=1
 pkgdesc="Face unlock for KDE Plasma, GNOME, sudo and polkit with IR cameras"
 arch=('x86_64' 'aarch64')
