@@ -44,11 +44,19 @@ export const FaceWindow = GObject.registerClass(class FaceWindow extends Adw.App
 
         this._enrollDialog = null;
 
-        service.connect('status-changed', () => this._updateBanner());
+        // The target rows show status and settings too: the auto-login one
+        // depends on the disk being encrypted and the keyring hint
+        service.connect('status-changed', () => {
+            this._updateBanner();
+            this._updateTargets();
+        });
         service.connect('checks-changed', () => this._updateBanner());
         service.connect('models-changed', () => this._onModelsChanged());
         service.connect('targets-changed', () => this._updateTargets());
-        service.connect('settings-changed', () => this._updateRecognition());
+        service.connect('settings-changed', () => {
+            this._updateRecognition();
+            this._updateTargets();
+        });
         service.connect('scanning-changed', () => this._updateModels());
         for (const signal of ['action-failed', 'notice']) {
             service.connect(signal, (_service, message) => {
@@ -245,8 +253,9 @@ export const FaceWindow = GObject.registerClass(class FaceWindow extends Adw.App
             if (response === 'rename' && label !== '' && label !== model.label)
                 this._service.renameModel(model.id, label);
         });
+        // Focus lands on the default button until the dialog is mapped
+        dialog.connect('map', () => entry.grab_focus());
         dialog.present(this);
-        entry.grab_focus();
     }
 
     _remove(model) {
@@ -311,7 +320,8 @@ export const FaceWindow = GObject.registerClass(class FaceWindow extends Adw.App
     _updateRecognition() {
         const service = this._service;
         this._updating = true;
-        const certainty = parseFloat(service.setting('video.certainty'));
+        // Empty before the settings load and while the service is down
+        const certainty = parseFloat(service.setting('video.certainty')) || 3.5;
         const preset = PRESETS.findIndex(item => Math.abs(item.value - certainty) < 0.01);
         const labels = PRESETS.map(item => item.label);
         if (preset < 0)
