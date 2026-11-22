@@ -6,7 +6,7 @@
 
 pkgbase=linux-hello-git
 pkgname=('linux-hello-git' 'linux-hello-kde-git' 'linux-hello-gnome-git')
-pkgver=0.1.0.r704.gc397dac
+pkgver=0.1.1.r705.gcd53f44
 pkgrel=1
 pkgdesc="Face unlock for KDE Plasma, GNOME, sudo and polkit with IR cameras"
 arch=('x86_64' 'aarch64')
@@ -146,9 +146,14 @@ build() {
 	# makepkg has downloaded and verified everything into $srcdir
 	tools/build_runtime.sh --outdir "$srcdir/runtime" --download-dir "$srcdir" --offline
 
+	# makepkg keeps $srcdir between runs; never configure against a tree
+	# left over from another source revision
+	rm -rf "$srcdir/build" "$srcdir/build-kcm"
+
 	arch-meson . "$srcdir/build" \
 		-Dbundled_python_dir="$srcdir/runtime/linux-hello-runtime" \
-		-Ddlib_data_files="$srcdir"
+		-Ddlib_data_files="$srcdir" \
+		-Dwith_gnome=true
 	meson compile -C "$srcdir/build"
 
 	cmake -B "$srcdir/build-kcm" -S kcm -G Ninja \
