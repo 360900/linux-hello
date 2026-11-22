@@ -133,3 +133,13 @@ subprojects/
 # produced by tools/build_runtime.sh
 /build*/
 /build-runtime/
+
+# Arch packaging artifacts (vendored sources, wheels, model files, built packages)
+packaging/arch/*.whl
+packaging/arch/*.tar.gz
+packaging/arch/*.dat.bz2
+packaging/arch/*.pkg.tar.zst
+packaging/arch/linux-hello/
+
+# Claude Code local state
+.claude/
